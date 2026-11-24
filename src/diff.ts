@@ -150,19 +150,37 @@ function align(a: ToolStep[], b: ToolStep[]): Array<[number, number]> {
 }
 
 /**
- * Calls the model asked for in one turn run in parallel, and their order inside the turn means nothing. Sorting
- * them keeps a reordered batch from looking like a changed path.
+ * Calls the model asked for in one turn run in parallel, and their order inside the turn means nothing. The
+ * candidate's calls in each turn are put in the baseline's order: identical calls first take the place of their
+ * twin, then the rest fill the remaining places in their own order. A reordered batch is then no change, and one
+ * changed read in a batch is one argument change, not a shuffle.
  */
-function inTurnOrder(steps: ToolStep[]): ToolStep[] {
-  return steps
-    .map((s, i) => ({ s, i, k: key(s) }))
-    .sort((x, y) => x.s.turn - y.s.turn || (x.k < y.k ? -1 : x.k > y.k ? 1 : x.i - y.i))
-    .map((x) => x.s);
+function inBaselineOrder(baseline: ToolStep[], candidate: ToolStep[]): ToolStep[] {
+  const turns = new Map<number, ToolStep[]>();
+  for (const s of candidate) turns.set(s.turn, [...(turns.get(s.turn) ?? []), s]);
+  const out: ToolStep[] = [];
+  for (const [turn, calls] of [...turns.entries()].sort((x, y) => x[0] - y[0])) {
+    const base = baseline.filter((s) => s.turn === turn);
+    const left = [...calls];
+    const placed: (ToolStep | undefined)[] = base.map((b) => {
+      const i = left.findIndex((c) => key(c) === key(b));
+      return i >= 0 ? left.splice(i, 1)[0] : undefined;
+    });
+    // Same tool next, so a changed Read takes the place of the Read it replaced.
+    for (let k = 0; k < placed.length; k++) {
+      if (placed[k]) continue;
+      const i = left.findIndex((c) => c.name === base[k]?.name);
+      if (i >= 0) placed[k] = left.splice(i, 1)[0];
+    }
+    for (let k = 0; k < placed.length && left.length; k++) if (!placed[k]) placed[k] = left.shift();
+    out.push(...placed.filter((x): x is ToolStep => x !== undefined), ...left);
+  }
+  return out;
 }
 
 export function diffTraces(baseline: Trace, candidate: Trace): TraceDiff {
-  const a = inTurnOrder(baseline.steps);
-  const b = inTurnOrder(candidate.steps);
+  const a = baseline.steps;
+  const b = inBaselineOrder(a, candidate.steps);
   const pairs = align(a, b);
   const pairedA = new Set(pairs.map(([i]) => i));
   const pairedB = new Set(pairs.map(([, j]) => j));

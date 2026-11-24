@@ -91,13 +91,14 @@ per setup.
 | Replay | Runs | Used `service_owner` | Answer changed (judge) | Cost (no cache) |
 | --- | --- | --- | --- | --- |
 | No change ×2 | 6 | 6 of 6 | 0 of 6 | 0% |
-| Haiku 5.5 ×2 | 6 | **0 of 6** | **6 of 6** | -95% |
-| Opus 5.5 ×2 | 6 | 6 of 6 | 1 of 6 | +156% |
+| Haiku 5.5 ×2 | 6 | **1 of 6** | **5 of 6** | -94% |
+| Opus 5.5 ×2 | 6 | 6 of 6 | 0 of 6 | +188% |
 
-This is the regression TraceWarp exists to catch. Haiku 5.5 answered from the files every time and never
-searched for the deferred MCP tool, so it said refunds had no documented owner, or sent people to the wrong
+This is the regression TraceWarp exists to catch. Haiku 5.5 answered from the files and, in 5 of 6 runs, never
+searched for the deferred MCP tool. So it said refunds had no documented owner, or sent people to the wrong
 channel. The file-only Claude Code test above showed no regression at all, so a team checking only that would
-have shipped the switch. The single Opus change is borderline: whether a runbook step "confirms" the owner.
+have shipped the switch. An earlier run of the same setup, before two of the fixes below, gave the same picture:
+Haiku used the tool 0 of 6 times, and Opus changed 1 borderline answer out of 6.
 
 ## Bugs this found in TraceWarp
 
@@ -116,6 +117,16 @@ has a test:
    runs. Calls in one turn are now compared as a set. The tool alignment also prefers identical calls, so one
    extra read no longer shifts every later read onto the wrong partner.
 
+An independent review of this work then found more, all fixed with tests:
+- Glob could list file names outside the folder through `..` patterns or symlinked folders.
+- A model-written regex like `^(a+)+$` could freeze every replay. Grep now runs in a worker that is stopped
+  after 5 seconds.
+- A deferred tool was offered when the model never searched for it. This could have hidden the Haiku
+  regression.
+- A replay could crash with a `tool_reference` to a removed tool.
+- A recording started from the home folder would have opened it all to the replay. It is now refused unless a
+  folder is named.
+
 ## Limits
 
 - The built-in tools reimplement Claude Code's output formats. They are close, but sort order and some regex
@@ -123,4 +134,4 @@ has a test:
 - In-process SDK MCP tools (`createSdkMcpServer`) cannot be run live by TraceWarp. A replay answers them from
   the recording, or by fuzzy match. Put the tool behind a real MCP server and mark it `readOnly` and `live` to
   answer new calls for real.
-- These are small samples: 5 and 3 tasks over 7 files, with 1-2 repeats.
+- These are small samples: 5 and 3 tasks over 9 files, with 1-2 repeats.

@@ -68,7 +68,7 @@ export class Resolver {
 
     // A read-only live tool gives the true answer, which beats a recorded result for a merely similar call.
     if (this.opts.builtins?.handles(call.name)) {
-      const r = this.opts.builtins.call(call.name, call.input);
+      const r = await this.opts.builtins.call(call.name, call.input);
       return { content: r.content, isError: r.isError, replay: { tier: "live", note: `built-in ${call.name}` } };
     }
     let liveError: string | undefined;

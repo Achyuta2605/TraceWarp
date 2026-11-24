@@ -25,58 +25,61 @@ beforeEach(() => {
 afterEach(() => tmp.cleanup());
 
 describe("built-in Claude Code read tools", () => {
-  it("Read numbers lines like Claude Code and honours offset and limit", () => {
+  it("Read numbers lines like Claude Code and honours offset and limit", async () => {
     const t = new ClaudeCodeTools(root);
-    expect(t.call("Read", { file_path: join(root, "docs/a.md") })).toEqual({
+    expect(await t.call("Read", { file_path: join(root, "docs/a.md") })).toEqual({
       content: "1\t# Alpha\n2\tretry 3 times\n3\tbackoff 200 ms\n",
       isError: false,
     });
-    expect(t.call("Read", { file_path: "docs/a.md", offset: 2, limit: 1 }).content).toBe("2\tretry 3 times\n");
-    expect(t.call("Read", { file_path: "docs/missing.md" })).toEqual({
+    expect((await t.call("Read", { file_path: "docs/a.md", offset: 2, limit: 1 })).content).toBe("2\tretry 3 times\n");
+    expect(await t.call("Read", { file_path: "docs/missing.md" })).toEqual({
       content: "File does not exist.",
       isError: true,
     });
   });
 
-  it("Grep lists matching files, shows content with line numbers and context, and counts", () => {
+  it("Grep lists matching files, shows content with line numbers and context, and counts", async () => {
     const t = new ClaudeCodeTools(root);
-    expect(t.call("Grep", { pattern: "RETRY|on-call", "-i": true }).content).toBe(
+    expect((await t.call("Grep", { pattern: "RETRY|on-call", "-i": true })).content).toBe(
       "Found 2 files\nREADME.md\ndocs/a.md",
     );
-    expect(t.call("Grep", { pattern: "(?i)backoff", output_mode: "content", "-B": 1, path: "docs" }).content).toBe(
-      "docs/a.md-2-retry 3 times\ndocs/a.md:3:backoff 200 ms",
-    );
-    expect(t.call("Grep", { pattern: "e", output_mode: "count", glob: "*.{md,txt}", path: "docs" }).content).toBe(
-      "docs/a.md:1\ndocs/b.txt:1",
-    );
-    expect(t.call("Grep", { pattern: "zzz" }).content).toBe("No files found");
-    expect(t.call("Grep", { pattern: "(" }).isError).toBe(true);
+    expect(
+      (await t.call("Grep", { pattern: "(?i)backoff", output_mode: "content", "-B": 1, path: "docs" })).content,
+    ).toBe("docs/a.md-2-retry 3 times\ndocs/a.md:3:backoff 200 ms");
+    expect(
+      (await t.call("Grep", { pattern: "e", output_mode: "count", glob: "*.{md,txt}", path: "docs" })).content,
+    ).toBe("docs/a.md:1\ndocs/b.txt:1");
+    expect((await t.call("Grep", { pattern: "zzz" })).content).toBe("No files found");
+    expect((await t.call("Grep", { pattern: "(" })).isError).toBe(true);
   });
 
-  it("Glob and LS list files inside the root", () => {
+  it("Glob and LS list files inside the root", async () => {
     const t = new ClaudeCodeTools(root);
-    expect(t.call("Glob", { pattern: "**/*.md" }).content.split("\n").sort()).toEqual(["README.md", "docs/a.md"]);
-    expect(t.call("Glob", { pattern: "*.py" }).content).toBe("No files found");
-    expect(t.call("LS", { path: "docs" }).content).toContain("  - a.md");
+    expect((await t.call("Glob", { pattern: "**/*.md" })).content.split("\n").sort()).toEqual([
+      "README.md",
+      "docs/a.md",
+    ]);
+    expect((await t.call("Glob", { pattern: "*.py" })).content).toBe("No files found");
+    expect((await t.call("LS", { path: "docs" })).content).toContain("  - a.md");
   });
 
-  it("refuses paths outside the root, including through a symlink, and never offers write tools", () => {
+  it("refuses paths outside the root, including through a symlink, and never offers write tools", async () => {
     symlinkSync(join(tmp.dir, "secret.txt"), join(root, "link.txt"));
     const t = new ClaudeCodeTools(root);
     for (const file_path of [join(tmp.dir, "secret.txt"), "../secret.txt", "link.txt"]) {
-      const r = t.call("Read", { file_path });
+      const r = await t.call("Read", { file_path });
       expect(r.isError).toBe(true);
       expect(r.content).not.toContain("TOP SECRET");
     }
-    expect(t.call("Grep", { pattern: "SECRET", path: ".." }).isError).toBe(true);
-    expect(t.call("Grep", { pattern: "SECRET" }).content).toBe("No files found");
+    expect((await t.call("Grep", { pattern: "SECRET", path: ".." })).isError).toBe(true);
+    expect((await t.call("Grep", { pattern: "SECRET" })).content).toBe("No files found");
     expect(t.handles("Write")).toBe(false);
     expect(t.handles("Bash")).toBe(false);
   });
 
-  it("maps absolute paths from the recorded folder onto the replay root", () => {
+  it("maps absolute paths from the recorded folder onto the replay root", async () => {
     const t = new ClaudeCodeTools(root, "/home/someone/old-checkout");
-    expect(t.call("Read", { file_path: "/home/someone/old-checkout/docs/a.md", limit: 1 }).content).toBe(
+    expect((await t.call("Read", { file_path: "/home/someone/old-checkout/docs/a.md", limit: 1 })).content).toBe(
       "1\t# Alpha\n",
     );
   });
@@ -224,7 +227,7 @@ describe("Agent SDK sessions", () => {
       tools: [{ name: "ToolSearch" }],
       messages: [
         { role: "user", content: "Who owns refunds?" },
-        { role: "user", content: " - Primary working directory: /agent/docs\n" },
+        { role: "system", content: [{ type: "text", text: " - Primary working directory: /agent/docs\n" }] },
       ],
     };
     rec.record({
@@ -295,8 +298,131 @@ describe("Agent SDK sessions", () => {
     expect(((hidden.requests[1]?.tools ?? []) as { name: string }[]).map((t) => t.name)).not.toContain(owner.name);
   });
 
-  it("keeps a recorded absolute path that is already inside the root", () => {
+  it("keeps a recorded absolute path that is already inside the root", async () => {
     const t = new ClaudeCodeTools(join(root, "docs"), root);
-    expect(t.call("Read", { file_path: join(root, "docs", "a.md"), limit: 1 }).content).toBe("1\t# Alpha\n");
+    expect((await t.call("Read", { file_path: join(root, "docs", "a.md"), limit: 1 })).content).toBe("1\t# Alpha\n");
+  });
+});
+
+describe("review fixes", () => {
+  it("Glob cannot list files outside the root: no .., no absolute patterns, no symlinked folders", async () => {
+    mkdirSync(join(tmp.dir, "outside"));
+    writeFileSync(join(tmp.dir, "outside", "secret.txt"), "x");
+    symlinkSync(join(tmp.dir, "outside"), join(root, "linkdir"));
+    const t = new ClaudeCodeTools(root);
+    for (const pattern of ["../**/*", "../../**/*", join(tmp.dir, "**/*")]) {
+      const r = await t.call("Glob", { pattern });
+      expect(r.isError).toBe(true);
+      expect(r.content).not.toContain("secret");
+    }
+    expect((await t.call("Glob", { pattern: "linkdir/*" })).content).toBe("No files found");
+    expect((await t.call("Glob", { pattern: "**/*" })).content).not.toContain("secret");
+    expect((await t.call("Glob", { pattern: "*.md" })).content).toBe("README.md");
+    expect((await t.call("Glob", { pattern: "docs/*.{md,txt}" })).content.split("\n").sort()).toEqual([
+      "docs/a.md",
+      "docs/b.txt",
+    ]);
+  });
+
+  it("stops a Grep pattern that backtracks for ever instead of hanging the replay", async () => {
+    writeFileSync(join(root, "docs", "evil.txt"), `${"a".repeat(40)}!\n`);
+    const t = new ClaudeCodeTools(root);
+    const started = Date.now();
+    const r = await t.call("Grep", { pattern: "^(a+)+$", path: "docs/evil.txt" });
+    expect(r.isError).toBe(true);
+    expect(r.content).toContain("took longer");
+    expect(Date.now() - started).toBeLessThan(15_000);
+  }, 20_000);
+
+  it("multiline Grep shows only the lines a match covers", async () => {
+    writeFileSync(join(root, "docs", "m.txt"), "one\nstart\nmiddle\nend\nlast\n");
+    const t = new ClaudeCodeTools(root);
+    const r = await t.call("Grep", { pattern: "start.*?end", multiline: true, output_mode: "content", path: "docs" });
+    expect(r.content).toBe("docs/m.txt:2:start\ndocs/m.txt:3:middle\ndocs/m.txt:4:end");
+  });
+
+  it("reads a file whose name starts with .., and refuses a FIFO instead of blocking", async () => {
+    writeFileSync(join(root, "..notes"), "hi\n");
+    const t = new ClaudeCodeTools(root);
+    expect((await t.call("Read", { file_path: "..notes" })).content).toBe("1\thi\n");
+    const { execFileSync } = await import("node:child_process");
+    execFileSync("mkfifo", [join(root, "pipe")]);
+    expect(await t.call("Read", { file_path: "pipe" })).toEqual({
+      content: "Path is not a regular file.",
+      isError: true,
+    });
+  });
+
+  it("finds the session folder only in system text, and Windows paths too", async () => {
+    const { clientCwd } = await import("../src/recorder.js");
+    const req = (messages: unknown[], system?: unknown) =>
+      ({ model: "m", messages, ...(system ? { system } : {}) }) as Parameters<typeof clientCwd>[0];
+    expect(clientCwd(req([{ role: "user", content: "Primary working directory: /" }]))).toBeUndefined();
+    expect(clientCwd(req([], "env\n - Primary working directory: C:\\Users\\me\\repo\n"))).toBe("C:\\Users\\me\\repo");
+    expect(clientCwd(req([{ role: "system", content: "Primary working directory: /srv/app</system-reminder>" }]))).toBe(
+      "/srv/app",
+    );
+  });
+
+  it("will not open the home folder to a replay unless a root is named", async () => {
+    const { homedir } = await import("node:os");
+    const base = recordedTrace({ task: "t", turns: [[toolUse("Read", { file_path: "x" })]], tools: () => "" });
+    const p = new ScriptedProvider([{ content: [toolUse("Read", { file_path: ".ssh/id_rsa" })] }]);
+    const cand = await replay(
+      { ...base, cwd: homedir() },
+      {},
+      { provider: p, config: parseConfig("builtins: { claudeCode: { enabled: true } }") },
+    );
+    expect(cand.status).toBe("unreplayable");
+    expect(cand.replay?.warnings.join(" ")).toContain("name a narrower one");
+  });
+
+  it("does not offer a deferred tool to a model that never searched for it", async () => {
+    const owner = { name: "mcp__owners__owner", description: "Owner", input_schema: { type: "object" } };
+    const base = recordedTrace({
+      task: "Who owns refunds?",
+      turns: [[toolUse("search", { q: "refunds" })], [text("The ledger team.")]],
+      tools: () => "refunds doc",
+    });
+    base.laterTools = [{ turn: 1, tool: owner }];
+    const p = new ScriptedProvider([
+      { content: [toolUse("search", { q: "refunds" })] },
+      { content: [text("No owner found.")] },
+    ]);
+    await replay(base, {}, { provider: p, config: parseConfig("") });
+    expect(((p.requests[1]?.tools ?? []) as { name: string }[]).map((t) => t.name)).not.toContain(owner.name);
+  });
+
+  it("turns a tool_reference to a removed tool into a note, and does not warn about later tools", async () => {
+    const owner = { name: "mcp__owners__owner", description: "Owner", input_schema: { type: "object" } };
+    const base = recordedTrace({
+      task: "Who owns refunds?",
+      turns: [[toolUse("ToolSearch", { query: "owner" })], [text("The ledger team.")]],
+      tools: () => "",
+    });
+    (base.steps[0] as { result: unknown }).result = [{ type: "tool_reference", tool_name: owner.name }];
+    base.laterTools = [{ turn: 1, tool: owner }];
+    const p = new ScriptedProvider([
+      { content: [toolUse("ToolSearch", { query: "owner" })] },
+      { content: [text("No owner tool.")] },
+    ]);
+    const cand = await replay(base, { removeTools: [owner.name] }, { provider: p, config: parseConfig("") });
+    const sent = JSON.stringify(p.requests[1]?.messages);
+    expect(sent).not.toContain('"tool_reference"');
+    expect(sent).toContain("is not available");
+    expect(cand.replay?.warnings.join(" ")).not.toContain("no tool named");
+  });
+
+  it("counts one changed read in a parallel batch as one argument change", () => {
+    const batch = (...paths: string[]) =>
+      recordedTrace({
+        task: "Read",
+        turns: [paths.map((p) => toolUse("Read", { file_path: p })), [text("ok")]],
+        tools: () => "ok",
+      });
+    const d = diffTraces(batch("b.md", "a.md"), batch("b.md", "c.md"));
+    expect(d.tools.argChanges).toHaveLength(1);
+    expect(d.firstDivergence).toMatchObject({ kind: "arguments" });
+    expect(String(d.firstDivergence?.baseline)).toContain("a.md");
   });
 });

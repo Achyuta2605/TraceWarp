@@ -86,7 +86,11 @@ const configSchema = z
         });
       }
       if (t.deny && (t.live || t.readOnly)) {
-        ctx.addIssue({ code: "custom", path: ["tools", name, "deny"], message: "a denied tool cannot also be live" });
+        ctx.addIssue({
+          code: "custom",
+          path: ["tools", name, "deny"],
+          message: "a denied tool cannot also be readOnly or live",
+        });
       }
       if (t.live && !c.servers[t.live]) {
         ctx.addIssue({ code: "custom", path: ["tools", name, "live"], message: `no server named "${t.live}"` });

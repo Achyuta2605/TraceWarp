@@ -177,9 +177,25 @@ function toolNames(body: Record<string, unknown>): Set<string> {
  * `tracewarp record` ran in (an Agent SDK agent sets its own cwd).
  */
 export function clientCwd(request: Trace["request"]): string | undefined {
-  const m = /Primary working directory: ([^\n"\\]+)/.exec(JSON.stringify([request.system, request.messages]));
-  const dir = m?.[1]?.trim();
-  return dir?.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir ?? "") ? dir : undefined;
+  // Only system text: a user message that says "Primary working directory: /" must not set the sandbox.
+  const texts: string[] = [];
+  const collect = (content: unknown) => {
+    if (typeof content === "string") texts.push(content);
+    else if (Array.isArray(content)) {
+      for (const b of content as { type?: string; text?: unknown }[]) {
+        if (b?.type === "text" && typeof b.text === "string") texts.push(b.text);
+      }
+    }
+  };
+  collect(request.system);
+  // The Agent SDK sends its environment block as a system-role message.
+  for (const m of request.messages as { role?: string; content?: unknown }[])
+    if (m.role === "system") collect(m.content);
+  for (const t of texts) {
+    const dir = /Primary working directory: ([^\s<]+)/.exec(t)?.[1];
+    if (dir && (dir.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir))) return dir;
+  }
+  return undefined;
 }
 
 /** Saves the definitions of tools this call has that the trace's first request did not. */

@@ -195,8 +195,8 @@ tracewarp replay --label cc --agents-only --claude-code-tools --deny-tool Bash -
 - Cost is compared without the prompt cache. A replay reads the cache its recording just wrote and would
   otherwise look about 80% cheaper than it is. The billed cost is shown next to it.
 
-On a small Agent SDK agent with a custom MCP tool, Haiku 5.5 cut cost by 95% but never once loaded the MCP tool it
-needed, so 6 of 6 answers lost the service owner. Unchanged replays changed 0 of 6 answers. Details:
+On a small Agent SDK agent with a custom MCP tool, Haiku 5.5 cut cost by 94%, but in 5 of 6 runs it never loaded
+the MCP tool it needed, and those answers lost the service owner. Unchanged replays changed 0 of 6 answers. Details:
 [docs/claude-code.md](docs/claude-code.md).
 
 ## Judging answers
@@ -261,7 +261,7 @@ prompts and tool results, so treat them like logs: keep them out of git unless t
 
 ```bash
 npm install
-npm test          # build + 99 tests, no network or API key needed
+npm test          # build + 108 tests, no network or API key needed
 npm run lint && npm run typecheck
 ```
 
