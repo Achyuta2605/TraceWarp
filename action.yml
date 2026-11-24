@@ -1,0 +1,97 @@
+name: TraceWarp replay
+description: Replay recorded AI agent runs with a change (model, prompt, tools) and fail the check when behaviour changes.
+author: Achyuta2605
+branding:
+  icon: rewind
+  color: orange
+
+inputs:
+  anthropic-api-key:
+    description: Claude API key used for the replays (store it as a repository secret).
+    required: true
+  args:
+    description: 'Extra replay arguments, ONE PER LINE (so values with spaces or quotes pass through as written), e.g. "--model" and "claude-opus-5-5" on two lines.'
+    required: false
+    default: ""
+  dir:
+    description: Folder that holds the recorded traces (committed to the repo or restored from a cache).
+    required: false
+    default: .tracewarp
+  repeat:
+    description: Replays per trace. 2 or 3 separates real changes from run-to-run noise.
+    required: false
+    default: "1"
+  fail-on-change:
+    description: Fail the step when a trace changed in more than half of its replays.
+    required: false
+    default: "true"
+  artifact-name:
+    description: Name of the uploaded report artifact (make it unique in a matrix).
+    required: false
+    default: tracewarp-report
+  fail-on:
+    description: 'What counts as a change: "any" (tool path or final answer) or "answer" (final answer only).'
+    required: false
+    default: any
+
+outputs:
+  run-dir:
+    description: Folder with this run's report.html, summary.md, diffs.json and replayed traces.
+    value: ${{ steps.replay.outputs.run-dir }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Build TraceWarp
+      shell: bash
+      run: |
+        cd "$GITHUB_ACTION_PATH"
+        npm ci --omit=optional --no-audit --no-fund
+        npm run build
+
+    - name: Replay recorded traces
+      id: replay
+      shell: bash
+      env:
+        TRACEWARP_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        TW_ARGS: ${{ inputs.args }}
+        TW_DIR: ${{ inputs.dir }}
+        TW_REPEAT: ${{ inputs.repeat }}
+        TW_FAIL: ${{ inputs.fail-on-change }}
+        TW_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set +e
+        extra=()
+        while IFS= read -r line; do
+          line="${line#"${line%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
+          if [ -n "$line" ]; then extra+=("$line"); fi
+        done <<< "$TW_ARGS"
+        out="$RUNNER_TEMP/tracewarp-run-dir"
+        rm -f "$out"
+        flags=(--dir "$TW_DIR" replay --all --repeat "$TW_REPEAT" --write-run-dir "$out")
+        if [ "$TW_FAIL" = "true" ]; then flags+=(--fail-on-change --fail-on "$TW_FAIL_ON"); fi
+        node "$GITHUB_ACTION_PATH/dist/cli.js" "${flags[@]}" "${extra[@]}"
+        code=$?
+        # Only this run's folder, never an older one left in the traces directory.
+        if [ -f "$out" ]; then
+          dir=$(cat "$out")
+          echo "run-dir=$dir" >> "$GITHUB_OUTPUT"
+          if [ -f "$dir/summary.md" ]; then cat "$dir/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+        fi
+        case $code in
+          1) echo "::error::TraceWarp: the agent behaved differently on recorded traces (see the job summary)" ;;
+          2) echo "::error::TraceWarp: a replay failed with an error" ;;
+          3) echo "::error::TraceWarp: bad input or setup (no traces, missing API key, or a bad flag)" ;;
+        esac
+        exit $code
+
+    - name: Upload the replay report
+      if: always() && steps.replay.outputs.run-dir != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.replay.outputs.run-dir }}

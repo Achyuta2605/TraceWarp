@@ -3,3 +3,13 @@ How many times do we retry payment gateway calls, and what are the backoff delay
 How long do we keep application logs, and what must never appear in them?
 Checkout p95 latency has been 950 ms for 15 minutes. What are the steps?
 A customer wants a refund for a purchase from 150 days ago. Can we process it automatically? Who handles it?
+The payment gateway is failing 8% of calls for the last 10 minutes. What do we do, and who can switch to the backup?
+We're on the backup gateway. Is it safe to let tonight's settlement job run?
+When can we switch back to the primary gateway after an outage?
+A customer opened a $19 chargeback. Should we contest it?
+We got a $240 chargeback notice 5 days ago. What do we need to send, and by when?
+Our chargeback rate this month is 0.9%. Is that a problem, and who should know?
+Customers in one region can't pay but others can. What severity is this, and how fast must we respond?
+Checkout was completely down for 40 minutes yesterday. Do we need a postmortem, and by when?
+I need to query the production database to debug a refund. What do I need, and how long will access last?
+Can I use a break-glass account to fix a slow internal report?

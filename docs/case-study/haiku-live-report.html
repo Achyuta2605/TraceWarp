@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TraceWarp run_mwuh6mtj2dbfa03f</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d1d1b;--muted:#6b6b66;--card:#fff;--line:#e4e3de;--same:#2f7d4f;--changed:#b4541a;--unrep:#6d5bb5;--error:#b42318;--code:#f2f1ec}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ecebe6;--muted:#a09f99;--card:#1f1f1d;--line:#34332f;--same:#6cc38f;--changed:#f0a15f;--unrep:#a99bf0;--error:#f08a80;--code:#2a2a27}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 64px}h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 8px}
+.sub{color:var(--muted);margin:0 0 20px}code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:1px 5px;border-radius:4px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.card span{color:var(--muted);font-size:13px}
+.card.same b{color:var(--same)}.card.changed b{color:var(--changed)}.card.unreplayable b{color:var(--unrep)}.card.error b{color:var(--error)}
+.badge{display:inline-block;min-width:96px;text-align:center;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-radius:999px;padding:2px 8px;border:1px solid currentColor}
+.badge.same{color:var(--same)}.badge.changed{color:var(--changed)}.badge.unreplayable{color:var(--unrep)}.badge.error{color:var(--error)}
+details.run{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:8px 0}details.run>summary{cursor:pointer;padding:10px 14px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;list-style:none}
+details.run>summary::-webkit-details-marker{display:none}.task{font-weight:600;flex:1 1 300px}.why{color:var(--muted);font-size:13px}
+.body{padding:0 14px 14px;border-top:1px solid var(--line)}.ids{color:var(--muted);font-size:13px}table.paths{border-collapse:collapse;width:100%}
+table.paths th{text-align:left;color:var(--muted);font-weight:500;width:90px;padding:4px 0;vertical-align:top}table.paths td{padding:4px 0;overflow-wrap:anywhere}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:700px){.answers{grid-template-columns:1fr}}
+.answers h4{margin:8px 0 4px;font-size:13px;color:var(--muted)}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--code);border-radius:8px;padding:10px;margin:0;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:420px;overflow:auto}
+.verdict-line{font-size:14px}footer{color:var(--muted);font-size:12px;margin-top:32px}
+</style></head><body><main>
+<h1>Replay run_mwuh6mtj2dbfa03f</h1>
+<p class="sub">2026-11-24 09:12 UTC · <code>model</code> claude-haiku-5-5</p>
+<div class="cards">
+<div class="card same"><b>5</b><span>same</span></div>
+<div class="card changed"><b>25</b><span>changed</span></div>
+<div class="card unreplayable"><b>0</b><span>unreplayable</span></div>
+<div class="card error"><b>0</b><span>error</span></div>
+<div class="card"><b>$0.286 → $0.015</b><span>cost (-95%)</span></div>
+<div class="card"><b>138.4s → 78.7s</b><span>time (-43%)</span></div>
+</div>
+<p class="sub" style="margin-top:12px">30 traces · tool path changed 80% · arguments drifted 3% · final answer changed 0%</p>
+
+<h2>Runs</h2>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">How many times do we retry payment gateway calls, and what are the backoff delays?</span> <span class="why">step 3: called search instead of list_files</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugoywedb4e0da6</code> → <code>rp_mwuh6ows4b5f678f</code> · cost $0.0059 → $0.0005 (-92%) · time 1.9s → 2.4s · tool calls answered by exact 2, live 2</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>search</code> → <code>list_files</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>search</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. The replay gives the same retry count (3), the same backoff delays (200/400/800 ms), and the same HTTP 409 no-retry instruction, differing only in wording.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Payment gateway calls retry at most **3 times**. The backoff is exponential, starting at 200 ms, so the delays are **200 ms, 400 ms and 800 ms**. Don't retry a call that returns HTTP 409 (duplicate payment). This comes from `policies/retry-policy.md`.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Client calls to the payment gateway retry at most 3 times, with exponential backoff of 200 ms, 400 ms, and 800 ms. Calls that return HTTP 409 (duplicate payment) are never retried. Source: policies/retry-policy.md.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">How long do we keep application logs, and what must never appear in them?</span> <span class="why">step 1: called search instead of list_files</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugp0o97e7a486d</code> → <code>rp_mwuh6oj738123301</code> · cost $0.0044 → $0.0004 (-91%) · time 1.5s → 2.0s · tool calls answered by live 4</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>search</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+<p>Argument changes:</p><ul><li><code>search</code> #1: <code>query</code> &quot;log&quot; → &quot;application logs&quot;</li></ul>
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give 30 days retention and prohibit full card numbers and CVV codes; only the wording differs ('never' vs 'must not').</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Application logs are kept for 30 days. They must never contain full card numbers or CVV codes. (Source: `policies/data-retention.md`)</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Application logs are kept for 30 days. They must not contain full card numbers or CVV codes. (Source: policies/data-retention.md)</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">Checkout p95 latency has been 950 ms for 15 minutes. What are the steps?</span> <span class="why">step 2: same tool, different arguments</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugp33hc853fdc6</code> → <code>rp_mwuh6ppk24cedc9f</code> · cost $0.012 → $0.0006 (-95%) · time 12.4s → 3.4s · tool calls answered by exact 4, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+<p>Argument changes:</p><ul><li><code>search</code> #2: <code>query</code> &quot;p95&quot; → &quot;checkout latency&quot;</li><li><code>search</code> #3: <code>query</code> &quot;checkout&quot; → &quot;p95&quot;</li></ul>
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same three steps with the same values (12 pods, DB CPU above 85% leads to read replicas, escalate to platform after 30 minutes). The differences are only the SEV1/incident-commander note and the timing caveat, which are side information.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Your 950 ms p95 for 15 minutes is above the 800 ms / 10 minute threshold in `runbooks/high-latency.md`. The steps are:
+
+1. **Scale up.** Scale the `checkout-api` deployment to 12 pods.
+2. **Check the database.** If database CPU is above 85%, enable read replicas for the catalog queries.
+3. **Escalate.** If latency hasn't improved 30 minutes after the problem started, escalate to the platform team. The runbook doesn't say whether the 30 minutes runs from the start of the alert or from when you take action.
+
+`policies/incident-severity.md` defines SEV2 as &quot;payments degraded&quot;. Slow checkout probably fits that, which means a first response within 15 minutes. If customers can't pay at all, it becomes SEV1, and you'd page the incident commander. The runbook doesn't give a severity for latency, so that call is yours.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Your situation meets the runbook's first trigger, so start here:
+
+1. **Scale checkout-api to 12 pods.** The runbook (`runbooks/high-latency.md`) says to do this when p95 is above 800 ms for 10 minutes. You're at 950 ms for 15 minutes.
+2. **Check database CPU.** If it's above 85%, enable read replicas for the catalog queries. The runbook doesn't give a DB CPU reading, so I can't tell whether this step applies.
+3. **Escalate to the platform team** if there's no improvement after 30 minutes.
+
+Slow checkouts may also count as a degraded-payments incident. `policies/incident-severity.md` lists SEV2 for that, with a 15-minute first response. That's a judgment call for you to make.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">A customer wants a refund for a purchase from 150 days ago. Can we process it automatically? Who handles it?</span> <span class="why">step 4: made an extra call to read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugpca9fb37b4f2</code> → <code>rp_mwuh6r66a4bd8558</code> · cost $0.0080 → $0.0004 (-94%) · time 2.2s → 2.4s · tool calls answered by exact 3, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say the refund cannot be processed automatically because it exceeds the 120-day limit, and both route it to finance-ops.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>No, it can't be processed automatically. Refunds older than 120 days can't be, and this purchase is 150 days old. Send it to **finance-ops**. (Source: `runbooks/refund-failures.md`, step 4.)</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>No, it can't be processed automatically. The refund runbook says refunds older than 120 days cannot be processed automatically (`runbooks/refund-failures.md`). At 150 days, this one is over the limit. It should be sent to **finance-ops**, who handle it.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">We're on the backup gateway. Is it safe to let tonight's settlement job run?</span> <span class="why">step 3: called read_file instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugpjj350c48af7</code> → <code>rp_mwuh6ukl093f6947</code> · cost $0.0096 → $0.0005 (-95%) · time 6.1s → 3.1s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say not to run the settlement job on the backup gateway (double-counting, runbook step 3) and to resume after 15 minutes of primary error rates below 1%; the replay only adds extra flag and on-call details.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>**No, it isn't safe. Pause tonight's settlement job while you're on the backup gateway.** Step 3 of `runbooks/gateway-outage.md` says the nightly settlement job double-counts if it runs while the backup gateway is active.
+
+Resume it only after traffic is back on the primary gateway. The runbook says to switch back after 15 minutes of error rates below 1% on the primary.
+
+I didn't find anything in the other files that overrides this.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>No, not while you're on the backup gateway. The outage runbook (`runbooks/gateway-outage.md`, step 3) says to pause the nightly settlement job while the backup gateway is active, because it double-counts otherwise.
+
+I can't see live system state, so confirm the failover flag (`payments-failover`) is actually on. If it is, pause tonight's run. Only the on-call lead can flip the failover flag, so check with them before changing anything. The job can run again after traffic switches back to the primary, which requires 15 minutes of primary error rates below 1%.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">When can we switch back to the primary gateway after an outage?</span> <span class="why">step 1: called search instead of list_files</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugpo8ff6035c9d</code> → <code>rp_mwuh6txr77b9cbf2</code> · cost $0.0095 → $0.0004 (-96%) · time 3.4s → 1.9s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same switch-back condition (error rate below 1% for 15 minutes, runbook step 5); the replay's 'error-free' wording and its on-call lead note are only minor phrasing and side information.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>You can switch back to the primary gateway once its error rate has stayed below 1% for 15 minutes (`runbooks/gateway-outage.md`, step 5).
+
+Some related steps from the same runbook:
+- Keep posting updates in #payments-incidents every 30 minutes until the primary is back.
+- The nightly settlement job was paused while the backup was active. The runbook doesn't say when to resume it.
+- Only the on-call lead may flip the `payments-failover` flag. The runbook states this for the switch to the backup. It doesn't say who can switch back.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>After the primary gateway has been error-free for 15 minutes, with error rates below 1% on the primary, you can switch back (step 5 of `runbooks/gateway-outage.md`). Only the on-call lead may flip the `payments-failover` flag.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">A customer opened a $19 chargeback. Should we contest it?</span> <span class="why">step 2: called read_file instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugpr7x35f0c60c</code> → <code>rp_mwuh6vgo9066ea91</code> · cost $0.0084 → $0.0004 (-95%) · time 3.0s → 2.4s · tool calls answered by exact 2, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers conclude not to contest the $19 chargeback because disputes under $25 are accepted automatically; the recorded answer's extra note about the 0.8% and 1% thresholds is side information the task did not ask for.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>No, don't contest it. `runbooks/chargebacks.md` says disputes under $25 are accepted automatically and shouldn't be contested. At $19, this one is under that threshold.
+
+The same runbook has a related rule. If chargebacks pass 0.8% of monthly orders, tell the risk team (risk@). At 1% the account goes into the card network's monitoring program. Accepted small chargebacks still count toward that rate, so keep an eye on it.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>No. Don't contest it. The runbook says disputes under $25 are accepted automatically and should not be contested (`runbooks/chargebacks.md`). At $19, this one falls under that rule.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">We got a $240 chargeback notice 5 days ago. What do we need to send, and by when?</span> <span class="why">step 1: called list_files instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugpugg234ae6a1</code> → <code>rp_mwuh6x7be89c923b</code> · cost $0.0090 → $0.0005 (-95%) · time 5.4s → 2.9s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. The replay gives the same evidence list (order record, delivery proof, customer emails), the same portal, the same 7-day deadline with about 2 days left, and the same default-loss consequence; only the chargeback-rate side note is missing, and the task did not ask for it.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>**What to send:** Your $240 dispute is over the $25 threshold, so contest it. Attach the order record, the delivery proof and the customer emails. Submit them through the disputes portal (`runbooks/chargebacks.md`).
+
+**By when:** You have 7 days from the notice, and 5 days have passed. That leaves about 2 days. If you miss the deadline, you lose the dispute by default.
+
+Also check this month's chargeback rate. If it's above 0.8% of monthly orders, tell risk@. At 1% the account goes into the card network's monitoring program (`runbooks/chargebacks.md`).</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>**Deadline: 2 days left.** The notice was 5 days ago and a chargeback must be answered within 7 days, or it is lost by default (`runbooks/chargebacks.md`). Treat the deadline as day 7 from the notice date, so submit well before then.
+
+**What to send:** Since $240 is over the $25 threshold, contest it. Attach:
+1. The order record
+2. Delivery proof
+3. Customer emails
+
+Submit everything through the disputes portal (`runbooks/chargebacks.md`).
+
+I only have the runbook, not the notice itself, so confirm the exact due date on the notice.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">Our chargeback rate this month is 0.9%. Is that a problem, and who should know?</span> <span class="why">step 5: stopped before calling read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugpzbwf388c233</code> → <code>rp_mwuh6yaz384a59d0</code> · cost $0.012 → $0.0005 (-96%) · time 6.4s → 2.7s · tool calls answered by exact 4</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say 0.9% is a problem but under the 1% monitoring line, over the 0.8% threshold, and that risk@ should be told now; the recorded extras (7-day response, $25 rule, SEV, channel) were not asked.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Yes, it's a problem, though not a critical one yet. At 0.9% you're under the 1% line but over the 0.8% alert threshold.
+
+- **Why it matters:** If more than 1% of monthly orders are charged back, the account goes into the card network's monitoring program. (`runbooks/chargebacks.md`)
+- **Who should know:** Tell the risk team (risk@) now. The runbook says to notify them as soon as the rate passes 0.8%.
+- **Meanwhile:**
+  - Answer each chargeback within 7 days of the notice. Otherwise it is lost by default.
+  - Disputes under $25 are accepted automatically, so don't contest them.
+  - For disputes of $25 or more, attach the order record, delivery proof and customer emails. Submit them through the disputes portal.
+
+The docs don't classify a chargeback rate as an incident severity (`policies/incident-severity.md`), so I wouldn't treat this as a SEV. For questions, use #payments-oncall (`README.md`).</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Yes, it needs attention, but it isn't over the hard limit yet. At 0.9%, you're above the 0.8% notice threshold in the chargebacks runbook (`runbooks/chargebacks.md`), so the **risk team (risk@)** should be told now. The account enters the card network's monitoring program above 1%, so you have some room but not much.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">Customers in one region can't pay but others can. What severity is this, and how fast must we respond?</span> <span class="why">step 3: called search instead of read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugq45c25b1348a</code> → <code>rp_mwuh6yvza0a5df51</code> · cost $0.011 → $0.0006 (-94%) · time 3.9s → 2.8s · tool calls answered by exact 4, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give SEV2 with a 15-minute first response, and the SEV1 condition (5-minute response, page the incident commander) is consistent; the omitted postmortem and runbook steps were side information the task did not ask for.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>This is a **SEV2**. `policies/incident-severity.md` defines SEV2 as &quot;Payments degraded or one region down&quot;. SEV1 is only for customers who can't pay at all, and payments still work in the other regions.
+
+- **First response:** within 15 minutes.
+- **Postmortem:** needed only if the incident lasts more than 2 hours.
+- **Escalation:** if the other regions start failing too, it becomes SEV1. That means a 5-minute response and paging the incident commander.
+
+If the cause is a gateway failure, `runbooks/gateway-outage.md` applies. Its main steps are:
+- Fail over with the `payments-failover` flag. Only the on-call lead may flip it.
+- Pause the nightly settlement job while the backup gateway is active.
+- Post an update in #payments-incidents every 30 minutes.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>This is **SEV2**: &quot;Payments degraded or one region down.&quot; The first response is due within **15 minutes** (`policies/incident-severity.md`).
+
+It would be SEV1 (5-minute response, page the incident commander) only if customers could not pay at all.
+
+The `runbooks/gateway-outage.md` runbook may apply if the regional failure comes from the payment gateway. Its trigger is more than 5% of calls failing for 5 minutes.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">Checkout was completely down for 40 minutes yesterday. Do we need a postmortem, and by when?</span> <span class="why">step 4: stopped before calling read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugq8cv1239d9b6</code> → <code>rp_mwuh6zgt976825b5</code> · cost $0.010 → $0.0005 (-95%) · time 12.1s → 2.6s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say yes, a postmortem is needed, classify the outage as SEV1, and give the same deadline of 5 business days after the incident; the differences are only extra caveats and an example date.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Yes, you need a postmortem. It's due within 5 business days of the incident.
+
+`policies/incident-severity.md` defines a SEV1 as &quot;Customers cannot pay at all.&quot; A full checkout outage fits that definition. The policy requires a written postmortem for every SEV1 within 5 business days, whatever the duration. The 2-hour threshold applies only to SEV2s.
+
+Count the 5 business days from yesterday's incident. If it happened on a Monday, the deadline is the following Monday.
+
+One caveat: the policy doesn't say whether the clock starts at the incident or when it's declared resolved. The files also don't say who writes the postmortem.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Yes. A full checkout outage means customers can't pay at all, which is SEV1 under `policies/incident-severity.md`. SEV1 requires a written postmortem within 5 business days, so the deadline is 5 business days after yesterday's incident. I don't have today's date in the folder, so I can't give an exact calendar date.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">I need to query the production database to debug a refund. What do I need, and how long will access last?</span> <span class="why">step 3: called search instead of read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugqhscaad40dc7</code> → <code>rp_mwuh710wc35b39f9</code> · cost $0.0097 → $0.0006 (-94%) · time 3.6s → 3.2s · tool calls answered by exact 4, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same two facts the task asks for: an approved ticket is required and access expires after 4 hours; the omitted break-glass and refund-runbook details were side information the task did not ask for.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>You need an **approved ticket** for production database access. The access **expires after 4 hours** (`policies/access-control.md`).
+
+Some related rules from the same file:
+- Don't export customer data to a personal device.
+- Break-glass accounts are only for a SEV1. If you use one, report it to security within 24 hours.
+
+For the refund itself, `runbooks/refund-failures.md` says to check the error code first:
+- **R-402:** retry once after 15 minutes.
+- **R-500:** don't retry. Page the ledger team.
+- **Refunds older than 120 days:** these can't be processed automatically. Send them to finance-ops.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>You need an approved ticket. Production database access requires one, and it expires after 4 hours (policies/access-control.md). The policy doesn't say who approves tickets or how to request them, so check with your team lead or security for that step.
+
+Also, customer data can't be exported to a personal device.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">Can I use a break-glass account to fix a slow internal report?</span> <span class="why">step 1: called list_files instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugqkvw915d760f</code> → <code>rp_mwuh70vd372063ba</code> · cost $0.0094 → $0.0004 (-96%) · time 3.3s → 2.1s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say no, because break-glass is for SEV1 only and a slow internal report is not a SEV1; both point to an approved ticket with 4-hour expiry. The replay adds a 24-hour reporting requirement and omits the SEV3 classification, which is side detail.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>No. `policies/access-control.md` says break-glass accounts may be used only during a SEV1. `policies/incident-severity.md` defines a SEV1 as &quot;Customers cannot pay at all.&quot; A slow internal report falls under SEV3 (&quot;Internal tools or reports broken&quot;), which gets a next-business-day response.
+
+If you need production database access to fix the report, the normal route is an approved ticket. That access expires after 4 hours (`policies/access-control.md`).</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>No. According to `policies/access-control.md`, break-glass accounts may be used only during a SEV1 incident, and any use must be reported to security within 24 hours. A slow internal report doesn't qualify as a SEV1, so you'd need a normal approved access ticket instead. Production database access under that policy also needs an approved ticket and expires after 4 hours.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">How many times do we retry payment gateway calls, and what are the backoff delays?</span> <span class="why">step 3: called search instead of list_files</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugqqxee99861ea</code> → <code>rp_mwuh71r7d3599e92</code> · cost $0.0060 → $0.0003 (-94%) · time 2.0s → 2.0s · tool calls answered by exact 2, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>search</code> → <code>list_files</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>search</code> → <code>search</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same retry limit (3), the same backoff delays (200/400/800 ms), and the same instruction not to retry HTTP 409; differences are only wording.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Payment gateway calls retry **at most 3 times**. The backoff is exponential, starting at 200 ms, so the delays are **200 ms, 400 ms, then 800 ms**. Don't retry a call that returns HTTP 409 (duplicate payment). (Source: `policies/retry-policy.md`)</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Payment gateway calls retry at most **3 times**, with exponential backoff of **200 ms, 400 ms, and 800 ms**. Calls that return HTTP 409 (duplicate payment) are never retried. Source: `policies/retry-policy.md`.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">How long do we keep application logs, and what must never appear in them?</span> <span class="why">step 1: called search instead of list_files</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugqst76cb4ca99</code> → <code>rp_mwuh737fc8e8c861</code> · cost $0.0072 → $0.0004 (-95%) · time 2.0s → 1.9s · tool calls answered by live 3, exact 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>search</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+<p>Argument changes:</p><ul><li><code>search</code> #1: <code>query</code> &quot;log&quot; → &quot;application logs&quot;</li></ul>
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give a 30-day retention period and prohibit full card numbers and CVV in logs, citing the same source; only wording and formatting differ.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Application logs are kept for **30 days**. They must never contain **full card numbers or CVV**. Source: `policies/data-retention.md`.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Application logs are kept for 30 days. They must not contain full card numbers or CVV (policies/data-retention.md).</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">Checkout p95 latency has been 950 ms for 15 minutes. What are the steps?</span> <span class="why">step 2: same tool, different arguments</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugqvw4fbe6f8af</code> → <code>rp_mwuh74w9c20ad261</code> · cost $0.012 → $0.0006 (-95%) · time 6.1s → 3.4s · tool calls answered by exact 3, live 2</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+<p>Argument changes:</p><ul><li><code>search</code> #2: <code>query</code> &quot;p95&quot; → &quot;checkout p95 latency&quot;</li></ul>
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same three runbook steps (scale to 12 pods, check DB CPU &gt;85% and enable read replicas, escalate after 30 minutes) and the same SEV2 reading; the replay only omits side notes.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Your 950 ms p95 for 15 minutes is above the runbook's threshold (800 ms for 10 minutes). The steps below come from `runbooks/high-latency.md`:
+
+1. **Scale checkout-api to 12 pods.** The runbook says to do this when p95 is above 800 ms for 10 minutes.
+2. **Check database CPU.** If it's above 85%, enable read replicas for the catalog queries.
+3. **Escalate to the platform team** if there's no improvement after 30 minutes. That's about 15 minutes from now, counting from when the latency started.
+
+`policies/incident-severity.md` doesn't say how to classify slow checkouts. Payments that are slow but still working probably count as SEV2 (&quot;Payments degraded&quot;), which means a 15-minute first response. That's my reading, not something the runbook states. If customers can't pay at all, treat it as SEV1 and page the incident commander.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>The runbook (`runbooks/high-latency.md`) applies here. At 950 ms for 15 minutes, you're past the 800 ms / 10-minute threshold.
+
+1. **Scale checkout-api to 12 pods.**
+2. **Check database CPU.** If it's above 85%, enable read replicas for the catalog queries.
+3. **Escalate to the platform team** if there's no improvement after 30 minutes.
+
+The severity policy (`policies/incident-severity.md`) doesn't name a latency level. If checkout is degraded but customers can still pay, that most likely fits SEV2, which needs a first response within 15 minutes.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">A customer wants a refund for a purchase from 150 days ago. Can we process it automatically? Who handles it?</span> <span class="why">step 4: made an extra call to read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugr00h7eeab9df</code> → <code>rp_mwuh73xcefa57e93</code> · cost $0.0080 → $0.0004 (-95%) · time 2.3s → 2.0s · tool calls answered by exact 3, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say the refund cannot be processed automatically because 150 days exceeds the 120-day limit, and both route it to finance-ops.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>No, it can't be processed automatically. Refunds older than 120 days can't be, and this purchase is 150 days old. Send it to **finance-ops**.
+
+Source: `runbooks/refund-failures.md`, step 4.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>**No, not automatically.** The refund is 150 days old, and the refund runbook says refunds older than 120 days cannot be processed automatically (`runbooks/refund-failures.md`, step 4). It goes to **finance-ops**.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">We're on the backup gateway. Is it safe to let tonight's settlement job run?</span> <span class="why">step 3: called read_file instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugr8842a00a6a2</code> → <code>rp_mwuh76u3814f2caa</code> · cost $0.010 → $0.0005 (-95%) · time 9.5s → 2.7s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say no, pause the settlement job while on the backup gateway because it double-counts (runbook step 3), and both note only the on-call lead can flip the flag; the omitted switch-back and update-cadence details were not asked.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>**No, it isn't safe. Pause tonight's settlement job while you're on the backup gateway.** Step 3 of `runbooks/gateway-outage.md` says the job double-counts while the backup gateway is active.
+
+- Keep it paused until you've switched back to the primary. The runbook says to switch back only after 15 minutes of error rates below 1% on the primary.
+- Only the on-call lead can flip the `payments-failover` flag, so they're the one to ask about switching back.
+- The runbook also says to post updates in #payments-incidents every 30 minutes until the primary is back.
+
+I didn't find anything in the other files about running settlement safely on the backup gateway.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>**No, not while the backup gateway is active.** The gateway outage runbook (`runbooks/gateway-outage.md`, step 3) says to pause the nightly settlement job while the backup gateway is running, because it double-counts otherwise.
+
+I can't see live system state, so I can't confirm whether the `payments-failover` flag is currently on. If it is, pause the job. Only the on-call lead can flip that flag, so check with them if you're unsure.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">When can we switch back to the primary gateway after an outage?</span> <span class="why">step 1: called search instead of list_files</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugreebc0662c1f</code> → <code>rp_mwuh76eg39b2832e</code> · cost $0.0084 → $0.0004 (-95%) · time 3.0s → 2.0s · tool calls answered by exact 3, live 2</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code> → <code>search</code> → <code>search</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same condition (error rate below 1% for 15 minutes, step 5); the replay omits only the unrequested settlement-job side note and still includes the on-call lead restriction.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>You can switch back once the primary gateway's error rate has stayed below 1% for 15 minutes (`runbooks/gateway-outage.md`, step 5).
+
+Some related steps from the same runbook:
+- Only the on-call lead may flip the `payments-failover` flag.
+- Settlement job: the runbook says to pause the nightly job while the backup gateway is active. It doesn't say when to resume it, though presumably that's after the switch back.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>You can switch back once the primary gateway has had error rates below 1% for 15 minutes straight (runbooks/gateway-outage.md, step 5). Only the on-call lead may flip the `payments-failover` flag.</pre></div></div>
+</div></details>
+<details class="run changed" open>
+<summary><span class="badge changed">changed</span> <span class="task">A customer opened a $19 chargeback. Should we contest it?</span> <span class="why">step 2: called read_file instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugrh8b2b934e87</code> → <code>rp_mwuh77lc23913409</code> · cost $0.0085 → $0.0004 (-95%) · time 3.1s → 2.5s · tool calls answered by exact 2, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say not to contest the $19 chargeback because the runbook says disputes under $25 are accepted automatically; the replay only omits the extra chargeback-rate thresholds the task did not ask about.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>**No, don't contest it.** `runbooks/chargebacks.md` says disputes under $25 are accepted automatically and shouldn't be contested. At $19, this one is covered by that rule.
+
+The same runbook says that if chargebacks pass 0.8% of monthly orders, you should tell the risk team (risk@). Above 1%, the account goes into the card network's monitoring program. This dispute still counts toward your chargeback rate, so keep an eye on that rate.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>No. Per `runbooks/chargebacks.md`, disputes under $25 are accepted automatically and should not be contested. At $19, this one falls under that rule.</pre></div></div>
+</div></details>
+<details class="run changed">
+<summary><span class="badge changed">changed</span> <span class="task">We got a $240 chargeback notice 5 days ago. What do we need to send, and by when?</span> <span class="why">step 1: called list_files instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugrl5wa450cd2f</code> → <code>rp_mwuh797j7729e6c2</code> · cost $0.0089 → $0.0005 (-94%) · time 5.7s → 2.7s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same three items (order record, delivery proof, customer emails), the disputes portal, the 7-day deadline with about 2 days left, and the decision to contest because $240 is over the $25 threshold; the 0.8% and 1% side notes also match.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>**What to send** (`runbooks/chargebacks.md`): The dispute is $240, which is over the $25 threshold, so contest it. Attach these three items and submit them through the disputes portal:
+- the order record
+- delivery proof
+- the customer emails
+
+**By when:** You have 7 days from the notice or the dispute is lost by default. The notice came 5 days ago, so you have about **2 days left**.
+
+Also check this month's chargeback rate. If it has passed 0.8% of monthly orders, tell risk@. At 1% the account goes into the card network's monitoring program.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>You have about **2 days left**. The runbook says a chargeback must be answered within 7 days of the notice, or it is lost by default (runbooks/chargebacks.md). Since the notice was 5 days ago, the deadline is about day 7, so submit well before then.
+
+Because $240 is over the $25 threshold, you should contest it. Attach:
+- The order record
+- Proof of delivery
+- Customer emails
+
+Submit everything through the disputes portal.
+
+Also, if this pushes your monthly chargeback rate above 0.8%, notify risk@ right away. The account enters the card network's monitoring program above 1% (runbooks/chargebacks.md).</pre></div></div>
+</div></details>
+<details class="run changed">
+<summary><span class="badge changed">changed</span> <span class="task">Our chargeback rate this month is 0.9%. Is that a problem, and who should know?</span> <span class="why">step 2: called read_file instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugrqzn0820b7b4</code> → <code>rp_mwuh79qq6bea247d</code> · cost $0.012 → $0.0005 (-96%) · time 7.7s → 2.7s · tool calls answered by exact 4</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say 0.9% is a problem but under the 1% monitoring threshold, and both say to notify risk@ because it is past the 0.8% trigger; the omitted tips and severity note were not asked for.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Yes, it's a problem. At 0.9% you're close to the limit but not over it.
+
+- **Threshold:** If more than 1% of monthly orders are charged back, the account goes into the card network's monitoring program. You have about 0.1 points of room. (`runbooks/chargebacks.md`)
+- **Who should know:** Tell the risk team (risk@) now. The runbook says to notify them as soon as the rate passes 0.8%, and 0.9% is past that. (`runbooks/chargebacks.md`)
+
+Two things will help keep the rate down:
+- Answer every chargeback within 7 days of the notice. After that it is lost by default.
+- Contest disputes of $25 or more by attaching the order record, delivery proof and customer emails. Disputes under $25 are accepted automatically, so don't contest them.
+
+None of the docs say this is an incident, so the severity policy doesn't seem to apply. (`policies/incident-severity.md`)</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Yes, it needs attention, though it isn't over the hard limit yet. Per `runbooks/chargebacks.md`, 0.9% is above the 0.8% level where you tell the risk team (risk@). The card network's monitoring program starts above 1% of monthly orders, so you have some room, but the trend matters.
+
+Tell risk@ now. The runbook doesn't name anyone else.</pre></div></div>
+</div></details>
+<details class="run changed">
+<summary><span class="badge changed">changed</span> <span class="task">Customers in one region can't pay but others can. What severity is this, and how fast must we respond?</span> <span class="why">step 3: called search instead of read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugrvflf384686b</code> → <code>rp_mwuh7aqd6f8ee613</code> · cost $0.010 → $0.0006 (-94%) · time 4.0s → 2.7s · tool calls answered by exact 4, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give SEV2 with a 15-minute first response and the same SEV1 escalation and gateway runbook details; the replay only omits the postmortem note, which the task did not ask about.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>This is **SEV2**. Payments still work in other regions, so it isn't SEV1, and &quot;one region down&quot; is listed under SEV2 (`policies/incident-severity.md`).
+
+- **First response:** within 15 minutes.
+- **Postmortem:** only needed if the incident lasts more than 2 hours.
+
+If the cause turns out to be the payment gateway, `runbooks/gateway-outage.md` applies. It says to fail over with the `payments-failover` flag, which only the on-call lead may flip. It also says to post updates in #payments-incidents every 30 minutes.
+
+If the problem spreads to all regions, it becomes SEV1. That means a 5-minute response and paging the incident commander.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>This is **SEV2**, since payments are down in one region but not everywhere. Per `policies/incident-severity.md`, the first response is due within **15 minutes**. It would only be SEV1 (5-minute page to the incident commander) if customers in all regions couldn't pay.
+
+If the cause is the payment gateway, `runbooks/gateway-outage.md` applies. It says only the on-call lead can flip the `payments-failover` flag, and updates go to #payments-incidents every 30 minutes.</pre></div></div>
+</div></details>
+<details class="run changed">
+<summary><span class="badge changed">changed</span> <span class="task">Checkout was completely down for 40 minutes yesterday. Do we need a postmortem, and by when?</span> <span class="why">step 3: called search instead of read_file</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugrzh0b6484e1a</code> → <code>rp_mwuh7crja72be7f7</code> · cost $0.011 → $0.0006 (-95%) · time 5.4s → 2.8s · tool calls answered by exact 3, live 1</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+<p>Argument changes:</p><ul><li><code>read_file</code> #4: <code>path</code> &quot;runbooks/gateway-outage.md&quot; → &quot;policies/incident-severity.md&quot;</li></ul>
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say yes, a postmortem is needed because this is a SEV1, and the deadline is 5 business days from yesterday; the replay only omits side notes about SEV2 and the start-of-clock ambiguity.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Yes, you need a postmortem. Checkout was completely down, so customers couldn't pay at all. That matches the SEV1 definition in `policies/incident-severity.md`.
+
+SEV1 incidents need a written postmortem within 5 business days. The 40-minute length doesn't change that. The 2-hour threshold only applies to SEV2 incidents. Since the outage was yesterday, the deadline is 5 business days from yesterday's date.
+
+The policy doesn't say whether the 5 days start at the incident or at its resolution. Yesterday was both, so it makes no difference here.
+
+If checkout was only degraded, or if only one region was affected, it would be a SEV2. A SEV2 that lasted under 2 hours wouldn't need a postmortem. &quot;Completely down&quot; points to SEV1.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>**Yes.** A complete checkout outage means customers cannot pay at all, which is SEV1. Per `policies/incident-severity.md`, a SEV1 needs a written postmortem within 5 business days of the incident. Since yesterday's date isn't in the files, the deadline is 5 business days after yesterday. The 40-minute duration doesn't change this, because the postmortem requirement for SEV1 has no duration threshold.</pre></div></div>
+</div></details>
+<details class="run changed">
+<summary><span class="badge changed">changed</span> <span class="task">Can I use a break-glass account to fix a slow internal report?</span> <span class="why">step 1: called list_files instead of search</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugs6qn9fa3b95c</code> → <code>rp_mwuh7dl9854aba70</code> · cost $0.0093 → $0.0004 (-96%) · time 3.3s → 1.9s · tool calls answered by exact 3</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say no, because break-glass accounts are limited to SEV1 and a slow internal report doesn't qualify, and the replay's approved-access-path advice matches the recorded ticket advice.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>No. Under `policies/access-control.md`, you can use break-glass accounts only during a SEV1. `policies/incident-severity.md` defines a SEV1 as customers being unable to pay at all. A slow internal report falls under SEV3 (&quot;Internal tools or reports broken&quot;), and the first response for that is the next business day.
+
+If you need production database access to fix the report, the same access-control policy says to get an approved ticket. That access expires after 4 hours.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>No. According to policies/access-control.md, break-glass accounts may be used only during a SEV1 incident, and any use must be reported to security within 24 hours. A slow internal report doesn't qualify, so you'd need a different, approved access path.</pre></div></div>
+</div></details>
+<details class="run same">
+<summary><span class="badge same">same</span> <span class="task">What should I do when a refund fails with error R-500?</span> <span class="why">no divergence</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugowaw46da1ec9</code> → <code>rp_mwuh6of951c4747d</code> · cost $0.0088 → $0.0004 (-95%) · time 2.8s → 2.1s · tool calls answered by exact 4</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say not to retry, explain that R-500 means the ledger write failed, and say to page the ledger team; the recorded answer's extra note about the general retry policy is side information the task did not ask for.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>When a refund fails with `R-500`, **don't retry it. Page the ledger team.** `R-500` means our ledger write failed (`runbooks/refund-failures.md`, step 3).
+
+The general retry policy in `policies/retry-policy.md` doesn't override this. It covers client calls to the payment gateway and says nothing about `R-500`.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>If a refund fails with `R-500`, do not retry it. The error means our ledger write failed, so page the ledger team (`runbooks/refund-failures.md`, step 3).</pre></div></div>
+</div></details>
+<details class="run same">
+<summary><span class="badge same">same</span> <span class="task">The payment gateway is failing 8% of calls for the last 10 minutes. What do we do, and who can switch to the backup?</span> <span class="why">no divergence</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugpeqs995b7be0</code> → <code>rp_mwuh6soy1411acda</code> · cost $0.014 → $0.0007 (-95%) · time 5.0s → 4.0s · tool calls answered by exact 6</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. The replay gives the same runbook steps and the same key answer that only the on-call lead may flip `payments-failover`; the omitted SEV1 and postmortem details are side information the task did not ask for.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>This meets the outage threshold in `runbooks/gateway-outage.md`: 8% of calls failing for 10 minutes is above the runbook's 5% for 5 minutes. Follow the runbook:
+
+1. **Confirm** the failure on the gateway status page and in the `gateway_errors_total` metric.
+2. **Fail over** to the backup gateway with the `payments-failover` flag. **Only the on-call lead may flip it**, so contact them if that isn't you.
+3. **Pause the nightly settlement job** while the backup is active, because it double-counts otherwise.
+4. **Post updates** in #payments-incidents every 30 minutes until the primary is back.
+5. **Switch back** only after the primary's error rate has stayed below 1% for 15 minutes.
+
+Payments are degraded rather than fully down, so this is most likely a SEV2 under `policies/incident-severity.md`. That means a first response within 15 minutes, and a postmortem only if it lasts more than 2 hours. If customers can't pay at all, treat it as SEV1 instead. That means paging the incident commander within 5 minutes and writing a postmortem within 5 business days.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>**Do this now (per `runbooks/gateway-outage.md`):**
+
+1. Confirm on the gateway status page and the `gateway_errors_total` metric. At 8% for 10 minutes, you're past the runbook's 5% / 5-minute trigger.
+2. Flip the `payments-failover` flag to the backup gateway.
+3. Pause the nightly settlement job while the backup is active, or it double-counts.
+4. Post updates in #payments-incidents every 30 minutes.
+5. Switch back only after 15 minutes of primary error rates below 1%.
+
+Severity is probably SEV2 (payments degraded, not fully down) per `policies/incident-severity.md`, which calls for first response within 15 minutes. Upgrade to SEV1 if customers can't pay at all.
+
+**Who can switch:** Only the on-call lead may flip `payments-failover`. The files don't name who that is, so check your on-call schedule. I found no other approver.</pre></div></div>
+</div></details>
+<details class="run same">
+<summary><span class="badge same">same</span> <span class="task">What should I do when a refund fails with error R-500?</span> <span class="why">no divergence</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugqny5d4e02d3d</code> → <code>rp_mwuh71lcc6216a77</code> · cost $0.0088 → $0.0005 (-95%) · time 2.9s → 2.5s · tool calls answered by exact 4</p>
+<table class="paths"><tr><th>Recorded</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>search</code> → <code>list_files</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers say not to retry, to page the ledger team, and that R-500 means the ledger write failed; the replay only omits the optional dashboard check and the retry-policy side note.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>Don't retry the refund. Page the ledger team. R-500 means our ledger write failed (`runbooks/refund-failures.md`, step 3).
+
+It can also help to check the refunds dashboard for a spike in error codes (step 1 of the same runbook). `policies/retry-policy.md` covers gateway client retries and doesn't change this.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>Don't retry it. Per `runbooks/refund-failures.md`, R-500 means the ledger write failed, so you should page the ledger team instead.</pre></div></div>
+</div></details>
+<details class="run same">
+<summary><span class="badge same">same</span> <span class="task">The payment gateway is failing 8% of calls for the last 10 minutes. What do we do, and who can switch to the backup?</span> <span class="why">no divergence</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugr2d867193fdd</code> → <code>rp_mwuh77ucb1ca5097</code> · cost $0.014 → $0.0008 (-94%) · time 4.9s → 4.4s · tool calls answered by exact 6</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same runbook steps, thresholds, and state that only the on-call lead can flip `payments-failover`; differences are only wording and minor side details (postmortem mention, on-call schedule tip).</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>This meets the outage threshold in `runbooks/gateway-outage.md`: more than 5% of calls failing for 5 minutes. You're at 8% for 10 minutes.
+
+**What to do** (`runbooks/gateway-outage.md`):
+1. Confirm the failures on the gateway status page and in the `gateway_errors_total` metric.
+2. Switch traffic to the backup gateway with the `payments-failover` flag.
+3. Pause the nightly settlement job while the backup is active. Otherwise it double-counts.
+4. Post an update in #payments-incidents every 30 minutes until the primary is back.
+5. Switch back only after the primary has had error rates below 1% for 15 minutes.
+
+**Who can switch:** only the on-call lead can flip `payments-failover`.
+
+**Severity:** this is probably SEV2, since payments are degraded but not completely down. That means a first response within 15 minutes (`policies/incident-severity.md`). If customers can't pay at all, it's SEV1. That means paging the incident commander within 5 minutes and writing a postmortem. The files don't say how to classify an 8% failure rate, so that call is yours.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>**Do this:**
+
+1. **Confirm the trigger.** Check the gateway status page and `gateway_errors_total`. The runbook's threshold is over 5% of calls failing for 5 minutes (`runbooks/gateway-outage.md`). At 8% for 10 minutes, you're past it.
+2. **Flip to backup.** Enable the `payments-failover` flag (same runbook).
+3. **Pause the nightly settlement job** while the backup is active, or it double-counts (same runbook).
+4. **Post updates** in #payments-incidents every 30 minutes (same runbook).
+5. **Switch back** only after 15 minutes of primary error rates below 1% (same runbook).
+
+Severity: if customers can still pay but with degraded success, that's SEV2, with a 15-minute first response. Use SEV1 (page the incident commander within 5 minutes) only if customers can't pay at all (`policies/incident-severity.md`).
+
+**Who can switch:** Only the on-call lead may flip `payments-failover` (`runbooks/gateway-outage.md`). The files don't name who that is, so check your on-call schedule.</pre></div></div>
+</div></details>
+<details class="run same">
+<summary><span class="badge same">same</span> <span class="task">I need to query the production database to debug a refund. What do I need, and how long will access last?</span> <span class="why">no divergence</span></summary>
+<div class="body">
+<p class="ids"><code>tw_mwugs3pf311e61f7</code> → <code>rp_mwuh7dhs68a675ea</code> · cost $0.0098 → $0.0005 (-95%) · time 3.3s → 2.6s · tool calls answered by exact 4</p>
+<table class="paths"><tr><th>Recorded</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr><tr><th>Replay</th><td><code>list_files</code> → <code>search</code> → <code>read_file</code> → <code>read_file</code></td></tr></table>
+
+<p class="verdict-line">Judge (claude-sonnet-5-5): <strong>same</strong>. Both answers give the same two facts the task asks for: an approved ticket is required and access expires after 4 hours; the omitted break-glass and refund error-code details are side information.</p>
+<div class="answers"><div><h4>Recorded answer <small>(end_turn)</small></h4><pre>You need an **approved ticket** to query the production database. Access **expires after 4 hours** (`policies/access-control.md`).
+
+Two related rules from the same file:
+- Don't export customer data to a personal device.
+- Break-glass accounts are only for a SEV1. If you use one, report it to security within 24 hours.
+
+For the refund itself, check the error code first (`runbooks/refund-failures.md`):
+- `R-402`: the card network declined it. Retry once after 15 minutes.
+- `R-500`: the ledger write failed. Don't retry. Page the ledger team.
+- Refunds older than 120 days can't be processed automatically. Send them to finance-ops.</pre></div><div><h4>Replay answer <small>(end_turn)</small></h4><pre>You need an **approved ticket** for production database access. Access **expires after 4 hours** (`policies/access-control.md`).
+
+The files don't say what the ticket must contain or how to request access, so check with your team or security for that step. Also, don't export customer data to a personal device.</pre></div></div>
+</div></details>
+<footer>Made by TraceWarp. Unreplayable means the replayed agent made a tool call the recording could not answer, so the run was stopped instead of guessed.</footer>
+</main></body></html>

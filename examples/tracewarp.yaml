@@ -1,0 +1,10 @@
+# Replay settings for the example file agent. Its tools only read files, so a replay may call them for real
+# (through examples/docs-mcp-server.ts) when the recording has no answer for a call.
+#   tracewarp replay --all --model claude-haiku-5-5 -c examples/tracewarp.yaml
+# Paths are relative to the repository root, so run it from there.
+servers:
+  docs: { command: [node, --import, tsx, examples/docs-mcp-server.ts, examples/demo-docs] }
+tools:
+  list_files: { readOnly: true, live: docs }
+  read_file: { readOnly: true, live: docs }
+  search: { readOnly: true, live: docs }

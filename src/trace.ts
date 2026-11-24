@@ -102,6 +102,18 @@ export function newTraceId(prefix = "tw"): string {
   return `${prefix}_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
 }
 
+/** The latest user text in the recorded request: the task the agent was given. */
+export function taskText(t: Pick<Trace, "request">): string {
+  for (let i = t.request.messages.length - 1; i >= 0; i--) {
+    const m = t.request.messages[i];
+    if (m?.role !== "user") continue;
+    if (typeof m.content === "string") return m.content;
+    const text = m.content.find((b) => b.type === "text") as { text?: string } | undefined;
+    if (text?.text) return text.text;
+  }
+  return "";
+}
+
 /** The text of a response's text blocks, joined. */
 export function responseText(m: Pick<Message, "content">): string {
   return m.content
