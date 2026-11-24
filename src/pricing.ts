@@ -51,6 +51,18 @@ export function priceFor(model: string): Price | undefined {
   return dated ? PRICES[dated[1] as string] : undefined;
 }
 
+/**
+ * Cost with every input token at the uncached input price. Two runs of one task send nearly the same prompt, so a
+ * replay often reads the prompt cache its recording just wrote and looks far cheaper than it would be. Comparing
+ * this figure instead takes caching out of the comparison. It equals the billed cost when no cache was used.
+ */
+export function cacheNeutralCostUsd(model: string, usage: TokenUsage): number | null {
+  const p = priceFor(model);
+  if (!p) return null;
+  const input = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+  return (input * p.input + usage.outputTokens * p.output) / 1_000_000;
+}
+
 /** Estimated cost in USD, or null when the model is not in the price table. */
 export function costUsd(model: string, usage: TokenUsage): number | null {
   const p = priceFor(model);

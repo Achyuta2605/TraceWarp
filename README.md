@@ -109,13 +109,16 @@ The replayed model runs its own loop from the recorded starting messages. Each t
 tiers, and every step in the report says which one answered it:
 
 1. **exact**: the same call (same tool, same arguments) is in the recording.
-2. **live**: the tool is marked read-only in `tracewarp.yaml` and connected to a real MCP server, so it is safe to
-   call for real. A live tool skips fuzzy matching: the true answer beats a recorded one for a similar call.
-3. **fuzzy**: a close call is in the recording (same tool, arguments at least 85% alike), e.g. `"paris "` vs
+2. **denied**: the tool is set to `deny: true` (or `--deny-tool`), so the call gets a permission error, as it
+   would have when the agent was not allowed to use it.
+3. **live**: the tool is marked read-only in `tracewarp.yaml` and connected to a real MCP server, or it is one of
+   Claude Code's read tools with `--claude-code-tools`, so it is safe to call for real. A live tool skips fuzzy
+   matching: the true answer beats a recorded one for a similar call.
+4. **fuzzy**: a close call is in the recording (same tool, arguments at least 85% alike), e.g. `"paris "` vs
    `"Paris"`. Numbers, ids, codes and paths must match exactly: `R-500` never answers for `R-501`.
-4. **simulated**: off by default. A cheap model (Claude Haiku 5.5) writes a plausible result from the tool's
+5. **simulated**: off by default. A cheap model (Claude Haiku 5.5) writes a plausible result from the tool's
    definition and the recorded examples.
-5. **unreplayable**: nothing could answer it. By default the run stops here and is reported as unreplayable,
+6. **unreplayable**: nothing could answer it. By default the run stops here and is reported as unreplayable,
    rather than letting the model continue on a made-up result and calling the run "changed".
 
 ```yaml
@@ -128,6 +131,9 @@ servers:
   fs: { command: [npx, -y, "@modelcontextprotocol/server-filesystem", "."] }
 tools:
   mcp__fs__read_text_file: { readOnly: true, live: fs }
+  Bash: { deny: true }  # a permission error, as the recorded session would have got
+builtins:
+  claudeCode: { enabled: true }  # Claude Code's Read/Grep/Glob/LS, read-only, in the recorded folder
 ```
 
 Live calls are only allowed for tools marked `readOnly: true`; the config is rejected otherwise.
@@ -142,7 +148,10 @@ For every run:
 - **final answer**: whether it changed *in substance*. Wording always varies between runs, so TraceWarp compares
   the key facts (numbers, codes, file names) and lists any the new answer lost. In our measurements, unchanged
   replays shared 87-100% of key facts while their wording was only 62-100% alike.
-- **cost and time**, priced from the token usage of each turn.
+- **cost and time**, priced from the token usage of each turn. Cost is compared without the prompt cache (every
+  input token at the uncached price), and the billed cost is shown too when caching made it differ.
+- **tool path** treats the calls of one turn as a set, so parallel calls that come back in another order are not
+  a change.
 - **the judge's ruling**, when `--judge` is on: same or changed, one sentence why, and what the replay lost.
 
 And for a batch: how many runs stayed the same, changed or could not be replayed, and the share whose tool path
@@ -163,6 +172,32 @@ to 30 recorded runs and 180 replays ([docs/case-study.md](docs/case-study.md)). 
 - Opus 5.5 cost 94% more for the same answers, with 26% fewer tool calls.
 - Read-only live tools turned 18 unreplayable Haiku runs into answered ones.
 - On pure noise, the key-facts check raised false alarms on 12% of runs. The judge raised none.
+
+## Claude Code and the Agent SDK
+
+Claude Code and the Claude Agent SDK read `ANTHROPIC_BASE_URL`, so `tracewarp record` captures them like any
+other agent:
+
+```bash
+tracewarp record --label cc -- claude -p "Who can switch to the backup gateway?" --allowedTools "Read,Grep,Glob"
+tracewarp replay --label cc --agents-only --claude-code-tools --deny-tool Bash --model claude-haiku-5-5 --judge
+```
+
+- `--agents-only` skips the side calls Claude Code makes on its own (titles, memory selection, summaries).
+- `--claude-code-tools [folder]` runs Read, Grep, Glob and LS for real, read-only, inside the folder the session
+  worked in. A new model reads files the recording never opened, so without this most replays stop as
+  unreplayable. These are TraceWarp's own implementations of the tools, close to Claude Code's output but not
+  byte-identical.
+- `--deny-tool Bash` answers any Bash call with a permission error, which is what a session recorded with
+  `--allowedTools` would have got. TraceWarp never runs Bash.
+- Tools that Claude Code loads on demand (MCP tools found with ToolSearch) are recorded and offered again when
+  the replayed model searches for them.
+- Cost is compared without the prompt cache. A replay reads the cache its recording just wrote and would
+  otherwise look about 80% cheaper than it is. The billed cost is shown next to it.
+
+On a small Agent SDK agent with a custom MCP tool, Haiku 5.5 cut cost by 94%, but in 5 of 6 runs it never loaded
+the MCP tool it needed, and those answers lost the service owner. Unchanged replays changed 0 of 6 answers. Details:
+[docs/claude-code.md](docs/claude-code.md).
 
 ## Judging answers
 
@@ -216,7 +251,7 @@ prompts and tool results, so treat them like logs: keep them out of git unless t
 
 ## Limits (today)
 
-- Claude Messages API traffic only.
+- Claude Messages API traffic only (Claude Code and the Agent SDK included).
 - Replay re-runs the agent loop from the recorded request. Changes inside your agent's own code (a new planning
   step, a different memory setup) are not replayed yet. Calling your agent with mocked MCP tools is planned.
 - The judge was calibrated on one agent and one kind of task (ops questions over docs). Check it on a sample of
@@ -226,12 +261,13 @@ prompts and tool results, so treat them like logs: keep them out of git unless t
 
 ```bash
 npm install
-npm test          # build + 83 tests, no network or API key needed
+npm test          # build + 108 tests, no network or API key needed
 npm run lint && npm run typecheck
 ```
 
 `examples/file-agent.ts` is a small real agent (three file tools) used by the tests, the demo and the case study,
-with `examples/demo-docs/` and `examples/demo-tasks.txt` as its data. `examples/docs-mcp-server.ts` serves the same
+with `examples/demo-docs/` and `examples/demo-tasks.txt` as its data. `examples/agent-sdk/` is a Claude Agent SDK
+agent with a custom MCP tool; it has its own `package.json` because the SDK is large. `examples/docs-mcp-server.ts` serves the same
 tools over MCP, and `examples/tracewarp.yaml` lets a replay call them live.
 
 ## License

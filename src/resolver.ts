@@ -1,3 +1,4 @@
+import type { ClaudeCodeTools } from "./builtins.js";
 import { type Config, toolConfig } from "./config.js";
 import { canonical, inputSimilarity } from "./json.js";
 import { type LiveTools, mcpToolName } from "./live.js";
@@ -8,7 +9,8 @@ import type { ReplayInfo, ToolStep } from "./trace.js";
  * Answers the tool calls a replayed model makes, trying each tier in order and saying which one answered:
  *   exact      the same call was recorded
  *   fuzzy      a close enough call was recorded (same tool, similar arguments)
- *   live       the tool is read-only and configured to run for real
+ *   live       the tool is read-only and configured to run for real (or is a built-in Claude Code read tool)
+ *   denied     the tool is set to deny, so the call gets a permission error, as it would have when recorded
  *   simulated  a model invented a plausible result (off by default)
  *   unreplayable  nothing could answer it
  * Recorded calls are consumed in order, so a call made twice is answered by the two recorded results in turn.
@@ -30,6 +32,8 @@ export interface ResolverOptions {
   /** Tool definitions from the request, used to brief the simulator. */
   tools?: unknown[];
   live?: LiveTools;
+  /** Claude Code's read-only file tools, run against a folder on disk. */
+  builtins?: ClaudeCodeTools;
   simulator?: Provider;
 }
 
@@ -53,8 +57,20 @@ export class Resolver {
     const exact = this.pick(candidates.filter((c) => canonical(c.step.input) === key));
     if (exact) return this.answer(exact, { tier: "exact" });
 
-    // A read-only live tool gives the true answer, which beats a recorded result for a merely similar call.
     const tool = toolConfig(this.opts.config, call.name);
+    if (tool.deny) {
+      return {
+        content: `Permission to use ${call.name} was denied, so the tool did not run.`,
+        isError: true,
+        replay: { tier: "denied" },
+      };
+    }
+
+    // A read-only live tool gives the true answer, which beats a recorded result for a merely similar call.
+    if (this.opts.builtins?.handles(call.name)) {
+      const r = await this.opts.builtins.call(call.name, call.input);
+      return { content: r.content, isError: r.isError, replay: { tier: "live", note: `built-in ${call.name}` } };
+    }
     let liveError: string | undefined;
     if (tool.live && tool.readOnly && this.opts.live) {
       try {

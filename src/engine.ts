@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { resolve } from "node:path";
+import { ClaudeCodeTools } from "./builtins.js";
 import { type Config, defaultConfig } from "./config.js";
 import { LiveTools } from "./live.js";
 import type { Provider } from "./provider.js";
@@ -46,6 +49,7 @@ function quirks(model: string): { noSampling: boolean; noDisabledThinking: boole
 export function candidateRequest(
   recorded: Trace["request"],
   changes: Changes,
+  laterTools: Trace["laterTools"] = [],
 ): { body: Record<string, unknown>; warnings: string[] } {
   const warnings: string[] = [];
   const { messages: _messages, ...rest } = structuredClone(recorded);
@@ -53,7 +57,11 @@ export function candidateRequest(
   if (changes.model) body.model = changes.model;
   if (changes.system !== undefined) body.system = changes.system;
   if (Array.isArray(body.tools)) {
-    const known = new Set((body.tools as { name?: string }[]).map((t) => t.name));
+    // Tools loaded on demand count too: offerLaterTools applies the same changes to them.
+    const known = new Set([
+      ...(body.tools as { name?: string }[]).map((t) => t.name),
+      ...laterTools.map((l) => (l.tool as { name?: string }).name),
+    ]);
     for (const name of [...Object.keys(changes.toolDescriptions ?? {}), ...(changes.removeTools ?? [])]) {
       if (!known.has(name)) warnings.push(`no tool named "${name}" in the recorded request`);
     }
@@ -115,7 +123,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-const API_BLOCKS = new Set(["text", "image", "document", "search_result"]);
+const API_BLOCKS = new Set(["text", "image", "document", "search_result", "tool_reference"]);
 
 /**
  * Shapes a recorded or live tool result into tool_result content the API accepts. Recorded results are already
@@ -155,16 +163,85 @@ function fromMcpBlock(raw: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+/** Claude Code's read-only tools for this replay, when the config turns them on and a folder is known. */
+function claudeCodeTools(config: Config, baseline: Trace, warnings: string[]): ClaudeCodeTools | undefined {
+  const cc = config.builtins.claudeCode;
+  if (!cc.enabled) return undefined;
+  const root = cc.root ?? baseline.cwd;
+  if (!root) {
+    warnings.push(
+      "built-in Claude Code tools are on, but the trace has no recorded folder: set builtins.claudeCode.root",
+    );
+    return undefined;
+  }
+  // A recording started from the home folder (or /) would open all of it to the replay, ~/.ssh included.
+  if (!cc.root && [homedir(), "/"].includes(resolve(root))) {
+    warnings.push(`built-in Claude Code tools are off: the recorded folder is ${root}; name a narrower one`);
+    return undefined;
+  }
+  try {
+    return new ClaudeCodeTools(root, baseline.cwd);
+  } catch (e) {
+    warnings.push(`built-in Claude Code tools are off: cannot open ${root} (${(e as Error).message})`);
+    return undefined;
+  }
+}
+
+/**
+ * Adds tools the recording loaded on demand. Each is offered once a tool result in the replay points at it (the
+ * `tool_reference` blocks a tool search returns), as the client would load it. A model that never searches never
+ * gets it, which is the behaviour a replay must show. Without this, a model that does search would never get the
+ * tool either, and the replay would fail for a reason the real agent never had.
+ */
+function offerLaterTools(
+  body: Record<string, unknown>,
+  later: Trace["laterTools"],
+  results: Record<string, unknown>[],
+  changes: Changes,
+): void {
+  const tools = Array.isArray(body.tools) ? (body.tools as Record<string, unknown>[]) : [];
+  const have = new Set(tools.map((t) => String(t.name)));
+  const referenced = new Set<string>();
+  for (const r of results) {
+    if (!Array.isArray(r.content)) continue;
+    for (const b of r.content as Record<string, unknown>[]) {
+      if (b?.type === "tool_reference" && typeof b.tool_name === "string") referenced.add(b.tool_name);
+    }
+  }
+  const added: Record<string, unknown>[] = [];
+  for (const { tool } of later ?? []) {
+    const t = tool as Record<string, unknown>;
+    const name = String(t.name);
+    if (have.has(name) || !referenced.has(name) || changes.removeTools?.includes(name)) continue;
+    const description = changes.toolDescriptions?.[name];
+    added.push(description === undefined ? structuredClone(t) : { ...structuredClone(t), description });
+    have.add(name);
+  }
+  if (added.length) body.tools = [...tools, ...added];
+  // A reference to a tool the request does not carry (one --remove-tool hid) is rejected by the API, so it
+  // becomes a plain note instead.
+  for (const r of results) {
+    if (!Array.isArray(r.content)) continue;
+    r.content = (r.content as Record<string, unknown>[]).map((b) =>
+      b?.type === "tool_reference" && !have.has(String(b.tool_name))
+        ? { type: "text", text: `Tool ${String(b.tool_name)} is not available.` }
+        : b,
+    );
+  }
+}
+
 export async function replay(baseline: Trace, changes: Changes, opts: ReplayOptions): Promise<Trace> {
   const config = opts.config ?? defaultConfig();
-  const { body: base, warnings } = candidateRequest(baseline.request, changes);
+  const { body: base, warnings } = candidateRequest(baseline.request, changes, baseline.laterTools);
   const first = structuredClone(base);
   const ownLive = !opts.live && Object.keys(config.servers).length > 0;
   const live = opts.live ?? (ownLive ? new LiveTools(config.servers) : undefined);
+  const builtins = claudeCodeTools(config, baseline, warnings);
   const resolver = new Resolver(baseline.steps, {
     config,
     tools: base.tools as unknown[] | undefined,
     ...(live ? { live } : {}),
+    ...(builtins ? { builtins } : {}),
     simulator: opts.simulator ?? opts.provider,
   });
 
@@ -220,6 +297,7 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
         base.tool_choice = { ...rest, type: "auto" };
         warnings.push("tool_choice was forced; it applies to the first turn only and is auto after that");
       }
+      offerLaterTools(base, baseline.laterTools, results, changes);
       const user = { role: "user", content: results } as unknown as MessageParam;
       messages.push(user);
       appended = [user];
@@ -237,6 +315,7 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
     createdAt: Date.now(),
     source: "replay",
     ...(baseline.label ? { label: baseline.label } : {}),
+    ...(baseline.cwd ? { cwd: baseline.cwd } : {}),
     status,
     request: { ...first, model: String(first.model), messages: baseline.request.messages },
     ...(baseline.headers ? { headers: baseline.headers } : {}),

@@ -1,5 +1,6 @@
 import { canonical, jsonChanges, keyFacts, overlap, type PathChange, textSimilarity } from "./json.js";
 import type { Judgement } from "./judge.js";
+import { cacheNeutralCostUsd } from "./pricing.js";
 import { type ReplayTier, type ToolStep, type Trace, taskText } from "./trace.js";
 
 /**
@@ -65,7 +66,10 @@ export interface TraceDiff {
   };
   turns: { baseline: number; candidate: number };
   tokens: { baseline: { input: number; output: number }; candidate: { input: number; output: number } };
+  /** Cache-neutral cost (see cacheNeutralCostUsd), so prompt caching cannot fake a saving. */
   costUsd: { baseline: number | null; candidate: number | null };
+  /** What the two runs were billed, prompt cache included. */
+  billedCostUsd: { baseline: number | null; candidate: number | null };
   latencyMs: { baseline: number; candidate: number };
   replayTiers: Partial<Record<ReplayTier, number>>;
   status: { baseline: Trace["status"]; candidate: Trace["status"] };
@@ -106,37 +110,77 @@ export function answerChanged(
 
 const key = (s: ToolStep) => `${s.name}\u0000${canonical(s.input)}`;
 
-/** Longest common subsequence of two lists by tool name, as index pairs. */
+/**
+ * Pairs the calls of two runs: the most calls with the same tool name, in order (a longest common subsequence),
+ * and among those pairings the one with the most identical calls, so one extra read does not shift every later
+ * read onto the wrong partner.
+ */
 function align(a: ToolStep[], b: ToolStep[]): Array<[number, number]> {
   const n = a.length;
   const m = b.length;
+  // A name match outweighs any number of identical-input bonuses.
+  const nameWeight = n + m + 1;
+  const weight = (i: number, j: number) => {
+    const x = a[i] as ToolStep;
+    const y = b[j] as ToolStep;
+    if (x.name !== y.name) return -1;
+    return nameWeight + (key(x) === key(y) ? 1 : 0);
+  };
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  const at = (i: number, j: number) => (dp[i] as number[])[j] as number;
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      const row = dp[i] as number[];
-      row[j] =
-        a[i]?.name === b[j]?.name
-          ? ((dp[i + 1] as number[])[j + 1] as number) + 1
-          : Math.max((dp[i + 1] as number[])[j] as number, row[j + 1] as number);
+      const w = weight(i, j);
+      (dp[i] as number[])[j] = Math.max(at(i + 1, j), at(i, j + 1), w > 0 ? at(i + 1, j + 1) + w : 0);
     }
   }
   const pairs: Array<[number, number]> = [];
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
-    if (a[i]?.name === b[j]?.name) {
+    const w = weight(i, j);
+    if (w > 0 && at(i, j) === at(i + 1, j + 1) + w) {
       pairs.push([i, j]);
       i++;
       j++;
-    } else if (((dp[i + 1] as number[])[j] as number) >= ((dp[i] as number[])[j + 1] as number)) i++;
+    } else if (at(i + 1, j) >= at(i, j + 1)) i++;
     else j++;
   }
   return pairs;
 }
 
+/**
+ * Calls the model asked for in one turn run in parallel, and their order inside the turn means nothing. The
+ * candidate's calls in each turn are put in the baseline's order: identical calls first take the place of their
+ * twin, then the rest fill the remaining places in their own order. A reordered batch is then no change, and one
+ * changed read in a batch is one argument change, not a shuffle.
+ */
+function inBaselineOrder(baseline: ToolStep[], candidate: ToolStep[]): ToolStep[] {
+  const turns = new Map<number, ToolStep[]>();
+  for (const s of candidate) turns.set(s.turn, [...(turns.get(s.turn) ?? []), s]);
+  const out: ToolStep[] = [];
+  for (const [turn, calls] of [...turns.entries()].sort((x, y) => x[0] - y[0])) {
+    const base = baseline.filter((s) => s.turn === turn);
+    const left = [...calls];
+    const placed: (ToolStep | undefined)[] = base.map((b) => {
+      const i = left.findIndex((c) => key(c) === key(b));
+      return i >= 0 ? left.splice(i, 1)[0] : undefined;
+    });
+    // Same tool next, so a changed Read takes the place of the Read it replaced.
+    for (let k = 0; k < placed.length; k++) {
+      if (placed[k]) continue;
+      const i = left.findIndex((c) => c.name === base[k]?.name);
+      if (i >= 0) placed[k] = left.splice(i, 1)[0];
+    }
+    for (let k = 0; k < placed.length && left.length; k++) if (!placed[k]) placed[k] = left.shift();
+    out.push(...placed.filter((x): x is ToolStep => x !== undefined), ...left);
+  }
+  return out;
+}
+
 export function diffTraces(baseline: Trace, candidate: Trace): TraceDiff {
   const a = baseline.steps;
-  const b = candidate.steps;
+  const b = inBaselineOrder(a, candidate.steps);
   const pairs = align(a, b);
   const pairedA = new Set(pairs.map(([i]) => i));
   const pairedB = new Set(pairs.map(([, j]) => j));
@@ -205,7 +249,11 @@ export function diffTraces(baseline: Trace, candidate: Trace): TraceDiff {
       baseline: { input: baseline.usage.inputTokens, output: baseline.usage.outputTokens },
       candidate: { input: candidate.usage.inputTokens, output: candidate.usage.outputTokens },
     },
-    costUsd: { baseline: baseline.usage.costUsd, candidate: candidate.usage.costUsd },
+    costUsd: {
+      baseline: cacheNeutralCostUsd(baseline.request.model, baseline.usage),
+      candidate: cacheNeutralCostUsd(candidate.request.model, candidate.usage),
+    },
+    billedCostUsd: { baseline: baseline.usage.costUsd, candidate: candidate.usage.costUsd },
     latencyMs: { baseline: baseline.usage.latencyMs, candidate: candidate.usage.latencyMs },
     replayTiers,
     status: { baseline: baseline.status, candidate: candidate.status },
