@@ -1,3 +1,4 @@
+import { ClaudeCodeTools } from "./builtins.js";
 import { type Config, defaultConfig } from "./config.js";
 import { LiveTools } from "./live.js";
 import type { Provider } from "./provider.js";
@@ -115,7 +116,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-const API_BLOCKS = new Set(["text", "image", "document", "search_result"]);
+const API_BLOCKS = new Set(["text", "image", "document", "search_result", "tool_reference"]);
 
 /**
  * Shapes a recorded or live tool result into tool_result content the API accepts. Recorded results are already
@@ -155,16 +156,73 @@ function fromMcpBlock(raw: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+/** Claude Code's read-only tools for this replay, when the config turns them on and a folder is known. */
+function claudeCodeTools(config: Config, baseline: Trace, warnings: string[]): ClaudeCodeTools | undefined {
+  const cc = config.builtins.claudeCode;
+  if (!cc.enabled) return undefined;
+  const root = cc.root ?? baseline.cwd;
+  if (!root) {
+    warnings.push(
+      "built-in Claude Code tools are on, but the trace has no recorded folder: set builtins.claudeCode.root",
+    );
+    return undefined;
+  }
+  try {
+    return new ClaudeCodeTools(root, baseline.cwd);
+  } catch (e) {
+    warnings.push(`built-in Claude Code tools are off: cannot open ${root} (${(e as Error).message})`);
+    return undefined;
+  }
+}
+
+/**
+ * Adds tools the recording loaded on demand. Each is offered once a tool result in the replay points at it (the
+ * `tool_reference` blocks a tool search returns) or once the replay reaches the turn where the recording first
+ * had it. Without this, a model that searches for a deferred tool never gets it, and the replay fails for a reason
+ * the real agent never had.
+ */
+function offerLaterTools(
+  body: Record<string, unknown>,
+  later: Trace["laterTools"],
+  nextTurn: number,
+  results: Record<string, unknown>[],
+  changes: Changes,
+): void {
+  if (!later?.length) return;
+  const tools = Array.isArray(body.tools) ? (body.tools as Record<string, unknown>[]) : [];
+  const have = new Set(tools.map((t) => String(t.name)));
+  const referenced = new Set<string>();
+  for (const r of results) {
+    if (!Array.isArray(r.content)) continue;
+    for (const b of r.content as Record<string, unknown>[]) {
+      if (b?.type === "tool_reference" && typeof b.tool_name === "string") referenced.add(b.tool_name);
+    }
+  }
+  const added: Record<string, unknown>[] = [];
+  for (const { turn, tool } of later) {
+    const t = tool as Record<string, unknown>;
+    const name = String(t.name);
+    if (have.has(name) || changes.removeTools?.includes(name)) continue;
+    if (!referenced.has(name) && turn > nextTurn) continue;
+    const description = changes.toolDescriptions?.[name];
+    added.push(description === undefined ? structuredClone(t) : { ...structuredClone(t), description });
+    have.add(name);
+  }
+  if (added.length) body.tools = [...tools, ...added];
+}
+
 export async function replay(baseline: Trace, changes: Changes, opts: ReplayOptions): Promise<Trace> {
   const config = opts.config ?? defaultConfig();
   const { body: base, warnings } = candidateRequest(baseline.request, changes);
   const first = structuredClone(base);
   const ownLive = !opts.live && Object.keys(config.servers).length > 0;
   const live = opts.live ?? (ownLive ? new LiveTools(config.servers) : undefined);
+  const builtins = claudeCodeTools(config, baseline, warnings);
   const resolver = new Resolver(baseline.steps, {
     config,
     tools: base.tools as unknown[] | undefined,
     ...(live ? { live } : {}),
+    ...(builtins ? { builtins } : {}),
     simulator: opts.simulator ?? opts.provider,
   });
 
@@ -220,6 +278,7 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
         base.tool_choice = { ...rest, type: "auto" };
         warnings.push("tool_choice was forced; it applies to the first turn only and is auto after that");
       }
+      offerLaterTools(base, baseline.laterTools, turn + 1, results, changes);
       const user = { role: "user", content: results } as unknown as MessageParam;
       messages.push(user);
       appended = [user];
@@ -237,6 +296,7 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
     createdAt: Date.now(),
     source: "replay",
     ...(baseline.label ? { label: baseline.label } : {}),
+    ...(baseline.cwd ? { cwd: baseline.cwd } : {}),
     status,
     request: { ...first, model: String(first.model), messages: baseline.request.messages },
     ...(baseline.headers ? { headers: baseline.headers } : {}),

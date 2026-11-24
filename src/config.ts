@@ -16,6 +16,8 @@ import { CONFIG_FILE_NAME } from "./brand.js";
  *   judge:
  *     enabled: false         # a Claude judge rules on final answers (see judge.ts)
  *     model: claude-sonnet-5-5
+ *   builtins:
+ *     claudeCode: { enabled: true, root: . }   # run Claude Code's Read/Grep/Glob/LS for real, inside root
  *   servers:
  *     fs: { command: [npx, -y, "@modelcontextprotocol/server-filesystem", "."] }
  *   tools:
@@ -37,6 +39,11 @@ const toolSchema = z.strictObject({
   mcpName: z.string().optional(),
   /** Never simulate this tool even when simulation is on. */
   noSimulate: z.boolean().default(false),
+  /**
+   * Answer every unrecorded call to this tool with a permission error, as the agent would have if it was not
+   * allowed to use the tool when recorded (Claude Code's Bash under --allowedTools, say).
+   */
+  deny: z.boolean().default(false),
 });
 
 const configSchema = z
@@ -57,6 +64,15 @@ const configSchema = z
         model: z.string().default("claude-sonnet-5-5"),
       })
       .prefault({}),
+    builtins: z
+      .strictObject({
+        /**
+         * Answer Claude Code's read-only tools (Read, Grep, Glob, LS) from the files on disk when the recording has
+         * no answer. `root` is the folder they may read; by default, the folder the session was recorded in.
+         */
+        claudeCode: z.strictObject({ enabled: z.boolean().default(false), root: z.string().optional() }).prefault({}),
+      })
+      .prefault({}),
     servers: z.record(z.string(), serverSchema).default({}),
     tools: z.record(z.string(), toolSchema).default({}),
   })
@@ -68,6 +84,9 @@ const configSchema = z
           path: ["tools", name, "live"],
           message: "live calls are only allowed for tools marked readOnly: true",
         });
+      }
+      if (t.deny && (t.live || t.readOnly)) {
+        ctx.addIssue({ code: "custom", path: ["tools", name, "deny"], message: "a denied tool cannot also be live" });
       }
       if (t.live && !c.servers[t.live]) {
         ctx.addIssue({ code: "custom", path: ["tools", name, "live"], message: `no server named "${t.live}"` });
@@ -111,5 +130,5 @@ export function loadConfig(path?: string): Config {
 }
 
 export function toolConfig(config: Config, name: string): ToolConfig {
-  return config.tools[name] ?? { readOnly: false, noSimulate: false };
+  return config.tools[name] ?? { readOnly: false, noSimulate: false, deny: false };
 }

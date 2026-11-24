@@ -26,7 +26,7 @@ export interface Exchange {
   response: Message;
 }
 
-export type ReplayTier = "exact" | "fuzzy" | "live" | "simulated" | "unreplayable";
+export type ReplayTier = "exact" | "fuzzy" | "live" | "denied" | "simulated" | "unreplayable";
 
 export interface ReplayInfo {
   tier: ReplayTier;
@@ -66,17 +66,28 @@ export interface ReplayMeta {
   errorStatus?: number;
 }
 
+/** A tool definition that appeared only in a later call of the task, as Claude Code's on-demand tools do. */
+export interface LaterTool {
+  /** Model turn (0-based) whose request first carried it. */
+  turn: number;
+  tool: unknown;
+}
+
 export interface Trace {
   version: typeof TRACE_VERSION;
   id: string;
   createdAt: number;
   source: "proxy" | "sdk" | "replay" | "import";
   label?: string;
+  /** Working folder of the recorded agent, when known. Replays map recorded absolute paths from it. */
+  cwd?: string;
   status: TraceStatus;
   /** The first request of the task, minus `stream`. Its messages are where a replay starts. */
   request: Record<string, unknown> & { model: string; messages: MessageParam[] };
   /** Request headers a replay must resend, such as anthropic-beta. */
   headers?: Record<string, string>;
+  /** Tools loaded on demand: a replay offers each one once the model asks for it, as the recording did. */
+  laterTools?: LaterTool[];
   exchanges: Exchange[];
   steps: ToolStep[];
   final: { text: string; stopReason: string | null; turns: number };
@@ -102,16 +113,30 @@ export function newTraceId(prefix = "tw"): string {
   return `${prefix}_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
 }
 
-/** The latest user text in the recorded request: the task the agent was given. */
+/**
+ * The latest user text in the recorded request: the task the agent was given. Context that clients such as
+ * Claude Code wrap around the task (`<system-reminder>` blocks) is left out.
+ */
 export function taskText(t: Pick<Trace, "request">): string {
   for (let i = t.request.messages.length - 1; i >= 0; i--) {
     const m = t.request.messages[i];
     if (m?.role !== "user") continue;
-    if (typeof m.content === "string") return m.content;
-    const text = m.content.find((b) => b.type === "text") as { text?: string } | undefined;
-    if (text?.text) return text.text;
+    const texts =
+      typeof m.content === "string"
+        ? [m.content]
+        : m.content.flatMap((b) => (b.type === "text" ? [(b as { text: string }).text] : []));
+    for (let k = texts.length - 1; k >= 0; k--) {
+      const clean = stripClientContext(texts[k] ?? "");
+      if (clean) return clean;
+    }
   }
   return "";
+}
+
+const CLIENT_CONTEXT = /<(system-reminder|command-[a-z-]+|local-command-[a-z-]+)>[\s\S]*?<\/\1>/g;
+
+function stripClientContext(text: string): string {
+  return text.replace(CLIENT_CONTEXT, "").trim();
 }
 
 /** The text of a response's text blocks, joined. */

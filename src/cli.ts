@@ -103,6 +103,8 @@ Examples:
         store: store(),
         source: "proxy",
         ...(o.label ? { label: o.label } : {}),
+        // The agent runs in this folder (or, for a bare proxy, most likely does).
+        cwd: process.cwd(),
         onTrace: (t, path) =>
           process.stderr.write(`[${CLI_NAME}] saved ${t.id} (${t.steps.length} tool calls, ${t.status}) → ${path}\n`),
       });
@@ -203,6 +205,10 @@ function readFileArg(path: string, what: string): string {
   return readFileSync(path, "utf8");
 }
 
+function hasTools(t: Trace): boolean {
+  return Array.isArray(t.request.tools) && t.request.tools.length > 0;
+}
+
 program
   .command("replay")
   .description("Replay recorded traces with a change and report what behaved differently.")
@@ -218,6 +224,12 @@ program
     [] as string[],
   )
   .option("--remove-tool <name>", "hide a tool from the model (repeatable)", collect, [] as string[])
+  .option(
+    "--deny-tool <name>",
+    "answer unrecorded calls to this tool with a permission error, as an agent not allowed to use it would get (repeatable)",
+    collect,
+    [] as string[],
+  )
   .option("--param <key=json>", "override a request setting, e.g. max_tokens=8000 (repeatable)", parseParam, {})
   .option("-c, --config <path>", `replay settings (default: ./${CONFIG_FILE_NAME})`)
   .option("-j, --concurrency <n>", "replays to run at once", positiveInt, 2)
@@ -227,6 +239,14 @@ program
   .option("--judge-model <model>", "model for the judge (default from config: claude-sonnet-5-5)")
   .option("--write-run-dir <file>", "write the run's folder path to this file (for CI scripts)")
   .option("--include-incomplete", "with --all or --label, also replay traces that did not finish when recorded")
+  .option(
+    "--agents-only",
+    "with --all or --label, skip single calls that offer no tools (such as Claude Code's side calls for titles and memory)",
+  )
+  .option(
+    "--claude-code-tools [root]",
+    "run Claude Code's read-only tools (Read, Grep, Glob, LS) for real inside root when the recording has no answer (default root: the recorded folder)",
+  )
   .option("--fail-on-change", "exit with code 1 when a trace changed in most of its replays (for CI)")
   .option(
     "--fail-on <what>",
@@ -254,10 +274,13 @@ replays); 2 a replay failed with an error, or every judge call failed; 3 bad inp
         system?: string;
         toolDesc: string[];
         removeTool: string[];
+        denyTool: string[];
         param: Record<string, unknown>;
         config?: string;
         concurrency: number;
         includeIncomplete?: boolean;
+        agentsOnly?: boolean;
+        claudeCodeTools?: boolean | string;
         repeat: number;
         judge?: boolean;
         judgeModel?: string;
@@ -291,7 +314,28 @@ replays); 2 a replay failed with an error, or every judge call failed; 3 bad inp
         }
         baselines = baselines.filter((t) => t.status === "complete");
       }
+      if (!refs.length && o.agentsOnly) {
+        const before = baselines.length;
+        baselines = baselines.filter((t) => t.steps.length > 0 || hasTools(t));
+        if (before > baselines.length) {
+          process.stderr.write(`[${CLI_NAME}] skipped ${before - baselines.length} single calls with no tools\n`);
+        }
+      }
       if (!baselines.length) fail("no traces to replay");
+      for (const name of o.denyTool) {
+        const t = config.tools[name];
+        if (t?.live) fail(`--deny-tool ${name}: the config makes this tool live`);
+        config.tools[name] = { ...(t ?? { readOnly: false, noSimulate: false }), readOnly: false, deny: true };
+      }
+      if (o.claudeCodeTools) {
+        config.builtins.claudeCode = {
+          enabled: true,
+          ...(typeof o.claudeCodeTools === "string" ? { root: o.claudeCodeTools } : {}),
+        };
+      }
+      if (config.builtins.claudeCode.root && !existsSync(config.builtins.claudeCode.root)) {
+        fail(`--claude-code-tools folder not found: ${config.builtins.claudeCode.root}`);
+      }
 
       const changes: Changes = {};
       if (o.model) changes.model = o.model;

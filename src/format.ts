@@ -3,6 +3,15 @@ import { type Trace, taskText } from "./trace.js";
 
 /** Plain-text output for the CLI. */
 
+/** Shown when prompt caching made the bill differ from the cache-neutral cost that is compared. */
+export function billedNote(d: Pick<TraceDiff, "costUsd" | "billedCostUsd">): string {
+  const b = d.billedCostUsd;
+  if (!b) return "";
+  const same = (x: number | null, y: number | null) => x === y || (x !== null && y !== null && Math.abs(x - y) < 1e-6);
+  if (same(b.baseline, d.costUsd.baseline) && same(b.candidate, d.costUsd.candidate)) return "";
+  return `   (billed ${money(b.baseline)} → ${money(b.candidate)} with prompt cache; cost above is without it)`;
+}
+
 export function money(n: number | null): string {
   if (n === null) return "n/a";
   if (n === 0) return "$0";
@@ -98,7 +107,8 @@ export function formatDiff(d: TraceDiff): string {
     `  answer  ${d.final.changed ? "CHANGED" : "same facts"}: key facts ${pct(d.final.factOverlap)} shared, wording ${pct(d.final.similarity)} alike (${d.final.baselineStop} → ${d.final.candidateStop})` +
       (d.final.missingFacts.length && !d.final.judge ? `; lost ${d.final.missingFacts.slice(0, 6).join(", ")}` : ""),
     `  cost    ${money(d.costUsd.baseline)} → ${money(d.costUsd.candidate)}${change(d.costUsd.baseline, d.costUsd.candidate)}` +
-      `   time ${(d.latencyMs.baseline / 1000).toFixed(1)}s → ${(d.latencyMs.candidate / 1000).toFixed(1)}s`,
+      `   time ${(d.latencyMs.baseline / 1000).toFixed(1)}s → ${(d.latencyMs.candidate / 1000).toFixed(1)}s` +
+      billedNote(d),
   );
   if (d.final.judge) {
     const j = d.final.judge;

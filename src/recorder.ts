@@ -1,4 +1,5 @@
 import { canonical } from "./json.js";
+import type { LaterTool } from "./trace.js";
 import {
   buildTrace,
   type Exchange,
@@ -30,6 +31,8 @@ interface OpenTrace {
   createdAt: number;
   request: Trace["request"];
   headers: Record<string, string>;
+  /** Tool definitions a later call added (tools loaded on demand), with the turn they first appeared in. */
+  laterTools: LaterTool[];
   /** Model and system text: a call only joins a trace by message prefix when these match. */
   fingerprint: string;
   /** Tool names of the last call. A later call may add tools (loaded on demand) but not drop them. */
@@ -44,6 +47,8 @@ export interface RecorderOptions {
   store?: TraceStore;
   source: Trace["source"];
   label?: string;
+  /** Working folder of the agent, saved on each trace so a replay can run read-only file tools there. */
+  cwd?: string;
   /** Called after each trace is written. */
   onTrace?: (trace: Trace, path: string) => void;
   /** Traces left open longer than this many calls are closed as incomplete. */
@@ -87,6 +92,7 @@ export class Recorder {
         headers: { ...(call.headers ?? {}) },
         fingerprint,
         tools: toolNames(call.body),
+        laterTools: [],
         exchanges: [],
         expected: [],
         pendingToolIds: new Set(),
@@ -95,6 +101,7 @@ export class Recorder {
       appended = [];
       if (this.open.length > (this.opts.maxOpen ?? 200)) this.finish(this.open[0] as OpenTrace, "incomplete");
     }
+    if (match) noteLaterTools(t, call.body);
     t.exchanges.push({ startedAt: call.startedAt, latencyMs: call.latencyMs, appended, response: call.response });
     t.expected = [...messages, { role: "assistant", content: call.response.content as MessageParam["content"] }];
     t.tools = toolNames(call.body);
@@ -131,14 +138,17 @@ export class Recorder {
 
   private finish(t: OpenTrace, status: Trace["status"]): void {
     this.open = this.open.filter((o) => o !== t);
+    const cwd = clientCwd(t.request) ?? this.opts.cwd;
     const trace = buildTrace({
       id: t.id,
       createdAt: t.createdAt,
       source: this.opts.source,
       ...(this.opts.label ? { label: this.opts.label } : {}),
+      ...(cwd ? { cwd } : {}),
       status,
       request: t.request,
       ...(Object.keys(t.headers).length ? { headers: t.headers } : {}),
+      ...(t.laterTools.length ? { laterTools: t.laterTools } : {}),
       exchanges: t.exchanges,
     });
     const path = this.store.save(trace);
@@ -162,6 +172,30 @@ function toolNames(body: Record<string, unknown>): Set<string> {
 }
 
 /** Never write credentials into a trace: MCP connector tokens are replaced, keeping the field so it shows. */
+/**
+ * The folder a Claude Code or Agent SDK session worked in, which its prompt names. It can differ from the folder
+ * `tracewarp record` ran in (an Agent SDK agent sets its own cwd).
+ */
+export function clientCwd(request: Trace["request"]): string | undefined {
+  const m = /Primary working directory: ([^\n"\\]+)/.exec(JSON.stringify([request.system, request.messages]));
+  const dir = m?.[1]?.trim();
+  return dir?.startsWith("/") || /^[A-Za-z]:[\\/]/.test(dir ?? "") ? dir : undefined;
+}
+
+/** Saves the definitions of tools this call has that the trace's first request did not. */
+function noteLaterTools(t: OpenTrace, body: Record<string, unknown>): void {
+  if (!Array.isArray(body.tools)) return;
+  const known = new Set([
+    ...(Array.isArray(t.request.tools) ? (t.request.tools as { name?: unknown }[]).map((x) => String(x.name)) : []),
+    ...t.laterTools.map((x) => String((x.tool as { name?: unknown }).name)),
+  ]);
+  for (const tool of body.tools as { name?: unknown }[]) {
+    if (tool && typeof tool === "object" && !known.has(String(tool.name))) {
+      t.laterTools.push({ turn: t.exchanges.length, tool });
+    }
+  }
+}
+
 function redact(body: Record<string, unknown>): Record<string, unknown> {
   if (!Array.isArray(body.mcp_servers)) return body;
   return {

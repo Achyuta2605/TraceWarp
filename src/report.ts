@@ -1,5 +1,5 @@
 import type { RunSummary, TraceDiff, Verdict } from "./diff.js";
-import { change, describeDivergence, money, pct } from "./format.js";
+import { billedNote, change, describeDivergence, money, pct } from "./format.js";
 
 /**
  * A single self-contained HTML page for one replay run: the summary, then every run with its tool path, argument
@@ -65,7 +65,7 @@ function runSection(d: TraceDiff, i: number): string {
   return `<details class="run ${esc(d.verdict)}"${d.verdict === "changed" && i < 20 ? " open" : ""}>
 <summary>${badge(d.verdict)} <span class="task">${esc(d.task || d.baselineId)}</span> <span class="why">${esc(describeDivergence(d))}</span></summary>
 <div class="body">
-<p class="ids"><code>${esc(d.baselineId)}</code> → <code>${esc(d.candidateId)}</code> · cost ${money(d.costUsd.baseline)} → ${money(d.costUsd.candidate)}${change(d.costUsd.baseline, d.costUsd.candidate)} · time ${(d.latencyMs.baseline / 1000).toFixed(1)}s → ${(d.latencyMs.candidate / 1000).toFixed(1)}s${tiers ? ` · tool calls answered by ${tiers}` : ""}</p>
+<p class="ids"><code>${esc(d.baselineId)}</code> → <code>${esc(d.candidateId)}</code> · cost ${money(d.costUsd.baseline)} → ${money(d.costUsd.candidate)}${change(d.costUsd.baseline, d.costUsd.candidate)} · time ${(d.latencyMs.baseline / 1000).toFixed(1)}s → ${(d.latencyMs.candidate / 1000).toFixed(1)}s${esc(billedNote(d))}${tiers ? ` · tool calls answered by ${tiers}` : ""}</p>
 <table class="paths"><tr><th>Recorded</th><td>${path(d.tools.baseline)}</td></tr><tr><th>Replay</th><td>${path(d.tools.candidate)}</td></tr></table>
 ${args ? `<p>Argument changes:</p><ul>${args}</ul>` : ""}
 <p class="verdict-line">${answerLine}</p>
