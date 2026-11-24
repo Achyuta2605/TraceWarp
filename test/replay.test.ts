@@ -259,7 +259,7 @@ describe("tracewarp replay (CLI)", () => {
         env: { ...process.env, TRACEWARP_ANTHROPIC_API_KEY: "", ANTHROPIC_API_KEY: "" },
         cwd: tmp.dir,
       });
-      expect(noKey.status).toBe(1);
+      expect(noKey.status).toBe(3);
       expect(noKey.stderr).toContain("TRACEWARP_ANTHROPIC_API_KEY");
       mkdirSync(join(tmp.dir, "cfg"));
       writeFileSync(join(tmp.dir, "cfg", "bad.yaml"), "replay: { onMiss: maybe }");
@@ -268,7 +268,7 @@ describe("tracewarp replay (CLI)", () => {
         [CLI, "--dir", dir, "replay", "--all", "-c", join(tmp.dir, "cfg", "bad.yaml")],
         { cwd: tmp.dir },
       );
-      expect(bad.status).toBe(1);
+      expect(bad.status).toBe(3);
       expect(bad.stderr).toContain("onMiss");
     } finally {
       await api.close();

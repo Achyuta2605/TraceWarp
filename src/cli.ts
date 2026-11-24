@@ -1,18 +1,20 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { Command, InvalidArgumentError } from "commander";
 import spawn from "cross-spawn";
 import { CLI_NAME, CONFIG_FILE_NAME, DEFAULT_UPSTREAM, PRODUCT_NAME, UPSTREAM_ENV_VAR } from "./brand.js";
 import { startRecordingProxy } from "./capture.js";
 import { ConfigError, loadConfig } from "./config.js";
-import { diffTraces } from "./diff.js";
+import { diffTraces, summarize, type TraceDiff } from "./diff.js";
 import type { Changes } from "./engine.js";
 import { formatDiff, formatSummary, formatTrace, formatTraceList } from "./format.js";
+import { ClaudeJudge } from "./judge.js";
 import { defaultOverwatchDb, enrichFromOverwatch } from "./overwatch.js";
 import { AnthropicProvider, MissingApiKeyError } from "./provider.js";
 import { Recorder } from "./recorder.js";
+import { type ReportInput, renderMarkdown, renderReport } from "./report.js";
 import { runReplays } from "./run.js";
 import { defaultDir, type Trace, TraceFormatError, TraceStore } from "./trace.js";
 
@@ -29,7 +31,10 @@ function collect(value: string, all: string[]): string[] {
   return [...all, value];
 }
 
-function fail(message: string, code = 1): never {
+/** Exit code for bad input or setup (no traces, no key, a bad flag or config), kept apart from "a trace changed". */
+const BAD_INPUT = 3;
+
+function fail(message: string, code = BAD_INPUT): never {
   process.stderr.write(`${CLI_NAME}: ${message}\n`);
   process.exit(code);
 }
@@ -41,6 +46,10 @@ replay:
   simulate: false        # let a cheap model invent results for unrecorded calls
   simulateModel: claude-haiku-5-5
   maxTurns: 50
+
+judge:
+  enabled: false         # let a Claude judge decide whether final answers changed (or pass --judge)
+  model: claude-sonnet-5-5
 
 # Real MCP servers for read-only tools, used only when a call has no recording.
 servers: {}
@@ -58,7 +67,9 @@ const program = new Command()
   .description(`${PRODUCT_NAME}: record real agent runs, replay them with a change, and see exactly what broke.`)
   .version(version)
   .enablePositionalOptions()
-  .option("-d, --dir <path>", "where traces and runs are kept", defaultDir());
+  .option("-d, --dir <path>", "where traces and runs are kept", defaultDir())
+  // Usage errors exit with BAD_INPUT too, so CI can tell them from a regression; help and --version exit 0.
+  .exitOverride((err) => process.exit(err.exitCode === 0 ? 0 : BAD_INPUT));
 
 function store(): TraceStore {
   return new TraceStore(resolve(program.opts<{ dir: string }>().dir));
@@ -210,13 +221,28 @@ program
   .option("--param <key=json>", "override a request setting, e.g. max_tokens=8000 (repeatable)", parseParam, {})
   .option("-c, --config <path>", `replay settings (default: ./${CONFIG_FILE_NAME})`)
   .option("-j, --concurrency <n>", "replays to run at once", positiveInt, 2)
+  .option("-r, --repeat <n>", "replay each trace n times, to tell real changes from run-to-run noise", positiveInt, 1)
+  .option("--judge", "let a Claude judge decide whether final answers changed")
+  .option("--no-judge", "use only the key-facts check, even if the config enables the judge")
+  .option("--judge-model <model>", "model for the judge (default from config: claude-sonnet-5-5)")
+  .option("--write-run-dir <file>", "write the run's folder path to this file (for CI scripts)")
   .option("--include-incomplete", "with --all or --label, also replay traces that did not finish when recorded")
-  .option("--fail-on-change", "exit with code 1 when any run changed (for CI)")
+  .option("--fail-on-change", "exit with code 1 when a trace changed in most of its replays (for CI)")
+  .option(
+    "--fail-on <what>",
+    "with --fail-on-change: any (tool path or answer, default) or answer (only a changed final answer)",
+    (v: string) => {
+      if (v !== "any" && v !== "answer") throw new InvalidArgumentError("use any or answer");
+      return v;
+    },
+    "any",
+  )
   .option("--json", "print the run summary and diffs as JSON")
   .addHelpText(
     "after",
     `
-Exit codes: 0 done, 1 a run changed (only with --fail-on-change) or bad input, 2 a replay failed with an error.`,
+Exit codes: 0 done; 1 a trace changed (only with --fail-on-change; with --repeat, in more than half of its
+replays); 2 a replay failed with an error, or every judge call failed; 3 bad input or setup.`,
   )
   .action(
     async (
@@ -232,7 +258,12 @@ Exit codes: 0 done, 1 a run changed (only with --fail-on-change) or bad input, 2
         config?: string;
         concurrency: number;
         includeIncomplete?: boolean;
+        repeat: number;
+        judge?: boolean;
+        judgeModel?: string;
+        writeRunDir?: string;
         failOnChange?: boolean;
+        failOn: "any" | "answer";
         json?: boolean;
       },
     ) => {
@@ -288,13 +319,22 @@ Exit codes: 0 done, 1 a run changed (only with --fail-on-change) or bad input, 2
         if (e instanceof MissingApiKeyError) fail(e.message);
         throw e;
       }
+      const judgeOn = o.judge === undefined ? config.judge.enabled || Boolean(o.judgeModel) : o.judge;
+      const judge = judgeOn
+        ? new ClaudeJudge(provider, {
+            model: o.judgeModel ?? config.judge.model,
+            cachePath: join(s.dir, "judge-cache.json"),
+          })
+        : undefined;
       const result = await runReplays({
         store: s,
         baselines,
         changes,
         provider,
         config,
+        ...(judge ? { judge } : {}),
         concurrency: o.concurrency,
+        repeat: o.repeat,
         onDone: (d, c) => {
           if (o.json) return;
           console.log(formatDiff(d));
@@ -308,14 +348,58 @@ Exit codes: 0 done, 1 a run changed (only with --fail-on-change) or bad input, 2
       else {
         console.log(formatSummary(result.summary, `Run ${result.id}`));
         console.log(`  saved to ${result.dir}`);
+        console.log(`  report  ${join(result.dir, "report.html")}`);
+      }
+      if (o.writeRunDir) writeFileSync(o.writeRunDir, `${result.dir}\n`);
+      const j = result.summary.judge;
+      if (judge && j.failed) {
+        process.stderr.write(
+          `[${CLI_NAME}] the judge failed on ${j.failed} of ${j.failed + j.judged} answers; those kept the key-facts result\n`,
+        );
       }
       if (result.aborted) {
         process.stderr.write(`${CLI_NAME}: stopped early: ${result.aborted}\n`);
         process.exitCode = 2;
-      } else if (result.summary.verdicts.error) process.exitCode = 2;
-      else if (o.failOnChange && result.summary.verdicts.changed) process.exitCode = 1;
+      } else if (result.summary.verdicts.error || (judge && j.failed && !j.judged)) process.exitCode = 2;
+      else if (
+        o.failOnChange &&
+        (o.failOn === "answer" ? result.summary.answerChangedTraces : result.summary.changedTraces)
+      ) {
+        process.exitCode = 1;
+      }
     },
   );
+
+program
+  .command("report")
+  .description("Rebuild the HTML report and Markdown summary of a replay run (default: the latest run).")
+  .argument("[run]", "run id or unique prefix, e.g. run_mwu...")
+  .option("--md", "print the Markdown summary instead of the report's path")
+  .action((ref: string | undefined, o: { md?: boolean }) => {
+    const s = store();
+    const runs = existsSync(s.runsDir) ? readdirSync(s.runsDir).filter((r) => r.startsWith("run_")) : [];
+    const matches = ref ? runs.filter((r) => r.startsWith(ref)) : runs.sort().slice(-1);
+    if (matches.length !== 1) fail(ref ? `${matches.length} runs match "${ref}"` : "no replay runs yet");
+    const dir = join(s.runsDir, matches[0] as string);
+    let input: ReportInput;
+    try {
+      const meta = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+      const diffs = JSON.parse(readFileSync(join(dir, "diffs.json"), "utf8")) as TraceDiff[];
+      input = {
+        runId: meta.id,
+        createdAt: meta.createdAt,
+        changes: meta.changes ?? {},
+        summary: summarize(diffs),
+        diffs,
+      };
+    } catch (e) {
+      fail(`could not read run ${matches[0]}: ${(e as Error).message}`);
+    }
+    writeFileSync(join(dir, "report.html"), renderReport(input));
+    const md = renderMarkdown(input);
+    writeFileSync(join(dir, "summary.md"), md);
+    console.log(o.md ? md : join(dir, "report.html"));
+  });
 
 program
   .command("diff")

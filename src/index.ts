@@ -2,6 +2,7 @@ export { isMessagesCall, recordingFetch, startRecordingProxy } from "./capture.j
 export { type Config, ConfigError, defaultConfig, loadConfig, parseConfig } from "./config.js";
 export { diffTraces, type RunSummary, summarize, type TraceDiff } from "./diff.js";
 export { type Changes, candidateRequest, replay } from "./engine.js";
+export { applyJudgement, ClaudeJudge, type Judgement } from "./judge.js";
 export { enrichFromOverwatch } from "./overwatch.js";
 export { costUsd, PRICES } from "./pricing.js";
 export { AnthropicProvider, fakeMessage, type Provider, ScriptedProvider } from "./provider.js";

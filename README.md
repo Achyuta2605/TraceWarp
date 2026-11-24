@@ -53,9 +53,15 @@ tracewarp replay --all --model claude-sonnet-5-5
 tracewarp replay --all --system new-prompt.txt
 tracewarp replay --all --tool-desc search=search-v2.txt --param 'output_config={"effort":"low"}'
 
-# 3. Measure the noise: replay with no change. Real models vary run to run, so this tells you
-#    how much difference to expect even when nothing changed.
-tracewarp replay --all
+# 3. Measure the noise: replay with no change, twice per trace. Real models vary run to run, so this
+#    tells you how much difference to expect even when nothing changed.
+tracewarp replay --all --repeat 2
+
+# 4. Let Claude judge the final answers instead of the free key-facts check (see "Judging answers").
+tracewarp replay --all --model claude-haiku-5-5 --judge --fail-on-change --fail-on answer
+
+# 5. Open the report of the last run.
+tracewarp report
 ```
 
 Recording in your own code instead of through the proxy:
@@ -87,7 +93,9 @@ thinking, forced `tool_choice`), TraceWarp drops or rewrites them and prints a n
 tracewarp replay --all --model claude-sonnet-5-5 --fail-on-change
 ```
 
-Exit codes: `0` done, `1` a run changed (only with `--fail-on-change`), `2` a replay failed with an error. A run
+Exit codes: `0` done, `1` a run changed (only with `--fail-on-change`), `2` a replay failed with an error or every
+judge call failed, `3` bad input (a missing key, a bad config, an unknown option, no traces). With
+`--fail-on answer`, only a changed final answer fails the run; a new tool path alone does not. A run
 stops early if the API refuses the key. Traces that did not finish when recorded are skipped unless you pass
 `--include-incomplete`.
 
@@ -135,10 +143,54 @@ For every run:
   the key facts (numbers, codes, file names) and lists any the new answer lost. In our measurements, unchanged
   replays shared 87-100% of key facts while their wording was only 62-100% alike.
 - **cost and time**, priced from the token usage of each turn.
+- **the judge's ruling**, when `--judge` is on: same or changed, one sentence why, and what the replay lost.
 
 And for a batch: how many runs stayed the same, changed or could not be replayed, and the share whose tool path
 changed, whose arguments drifted and whose answer changed. Cost and time totals count only the runs that could be
-compared, so a replay that stopped early never looks cheap. Each run is saved under `.tracewarp/runs/<id>/`.
+compared, so a replay that stopped early never looks cheap. With `--repeat`, a trace that came out the same in some
+replays and changed in others is listed as **flaky**, and `--fail-on-change` only fails on a trace that changed in
+most of its replays.
+
+Each run is saved under `.tracewarp/runs/<id>/`: the replayed traces, `diffs.json`, `summary.json`, a
+self-contained `report.html` (summary cards, then every run with both tool paths and both answers side by side)
+and a `summary.md` for a CI job summary or PR comment.
+
+## Case study
+
+We moved a real docs agent from Claude Sonnet 5.5 to Haiku 5.5 and to Opus 5.5, and edited its prompt. That came
+to 30 recorded runs and 180 replays ([docs/case-study.md](docs/case-study.md)). The results:
+- Haiku 5.5 kept the substance of every answer at 95% lower cost.
+- Opus 5.5 cost 94% more for the same answers, with 26% fewer tool calls.
+- Read-only live tools turned 18 unreplayable Haiku runs into answered ones.
+- On pure noise, the key-facts check raised false alarms on 12% of runs. The judge raised none.
+
+## Judging answers
+
+Wording changes every run, so "did the answer change?" needs care. TraceWarp has two checks:
+
+- **key-facts check** (default, free, instant): compares the numbers, codes and file names in both answers.
+- **Claude judge** (`--judge`, or `judge: { enabled: true }` in `tracewarp.yaml`): Claude Sonnet 5.5 reads the
+  task and both answers and decides whether a user who asked this task would be just as well served. It ignores
+  wording and side notes the task never asked about. It flags a different fact, number, owner, deadline or
+  conclusion, a lost instruction the task needs, and a give-up answer. Rulings are cached, so re-running costs
+  nothing. Pick another judge model with `--judge-model`; turn it off for one run with `--no-judge`.
+
+Measured on 85 labelled answer pairs from real replays ([evals/](evals/README.md)):
+
+| Check | Accuracy | False alarms | Missed changes |
+| --- | --- | --- | --- |
+| key-facts check | 56.5% | 32 of 59 | 5 of 26 |
+| Claude judge (Sonnet 5.5) | 98.8% | 1 of 59 | 0 of 26 |
+
+On 59 more real replays that were kept out while the judge prompt was written, the judge raised 0 false alarms and
+the key-facts check raised 23. The changed pairs are realistic defects edited into real answers, because none of the
+real replays regressed, and Claude wrote the labels. Details and caveats are in [evals/README.md](evals/README.md).
+
+## In CI
+
+`action.yml` makes TraceWarp a GitHub Action: on a pull request that edits your prompt or settings, it replays the
+recorded traces with the change, writes the summary to the job page, uploads the HTML report, and fails the check
+when a trace changed. See [docs/github-action.md](docs/github-action.md).
 
 ## AgentOverwatch
 
@@ -155,6 +207,7 @@ the call. It needs the optional `better-sqlite3` package, which npm installs whe
 | `tracewarp show <trace>` | One trace: task, tool calls, final answer. |
 | `tracewarp replay [traces...] --all` | Replay with a change and print the diff of every run plus a summary. |
 | `tracewarp diff <a> <b>` | Compare any two traces. |
+| `tracewarp report [run]` | Rebuild and show the HTML report (or `--md` summary) of a replay run. |
 | `tracewarp import-overwatch` | Attach AgentOverwatch server data to recorded calls. |
 | `tracewarp init` | Write a starter `tracewarp.yaml`. |
 
@@ -166,18 +219,20 @@ prompts and tool results, so treat them like logs: keep them out of git unless t
 - Claude Messages API traffic only.
 - Replay re-runs the agent loop from the recorded request. Changes inside your agent's own code (a new planning
   step, a different memory setup) are not replayed yet. Calling your agent with mocked MCP tools is planned.
-- Final-answer comparison is a deterministic heuristic. A Claude judge, checked against human labels, comes next.
+- The judge was calibrated on one agent and one kind of task (ops questions over docs). Check it on a sample of
+  your own traffic with `evals/judge-calibration.ts` before trusting it on a very different agent.
 
 ## Development
 
 ```bash
 npm install
-npm test          # build + 69 tests, no network or API key needed
+npm test          # build + 83 tests, no network or API key needed
 npm run lint && npm run typecheck
 ```
 
-`examples/file-agent.ts` is a small real agent (three file tools) used by the tests and the demo, with
-`examples/demo-docs/` and `examples/demo-tasks.txt` as its data.
+`examples/file-agent.ts` is a small real agent (three file tools) used by the tests, the demo and the case study,
+with `examples/demo-docs/` and `examples/demo-tasks.txt` as its data. `examples/docs-mcp-server.ts` serves the same
+tools over MCP, and `examples/tracewarp.yaml` lets a replay call them live.
 
 ## License
 

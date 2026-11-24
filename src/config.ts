@@ -13,6 +13,9 @@ import { CONFIG_FILE_NAME } from "./brand.js";
  *     simulate: false        # let a cheap model invent results for calls with no recording
  *     simulateModel: claude-haiku-5-5
  *     maxTurns: 50
+ *   judge:
+ *     enabled: false         # a Claude judge rules on final answers (see judge.ts)
+ *     model: claude-sonnet-5-5
  *   servers:
  *     fs: { command: [npx, -y, "@modelcontextprotocol/server-filesystem", "."] }
  *   tools:
@@ -45,6 +48,13 @@ const configSchema = z
         simulate: z.boolean().default(false),
         simulateModel: z.string().default("claude-haiku-5-5"),
         maxTurns: z.number().int().positive().default(50),
+      })
+      .prefault({}),
+    judge: z
+      .strictObject({
+        /** Let a Claude judge decide whether final answers changed, instead of the key-facts check. */
+        enabled: z.boolean().default(false),
+        model: z.string().default("claude-sonnet-5-5"),
       })
       .prefault({}),
     servers: z.record(z.string(), serverSchema).default({}),

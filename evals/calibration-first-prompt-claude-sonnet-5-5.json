@@ -1,0 +1,711 @@
+{
+  "model": "claude-sonnet-5-5",
+  "counts": {
+    "same": 59,
+    "changed": 26
+  },
+  "results": [
+    {
+      "name": "key-facts check",
+      "tp": 21,
+      "fp": 32,
+      "tn": 27,
+      "fn": 5,
+      "accuracy": 0.5647058823529412,
+      "precision": 0.39622641509433965,
+      "recall": 0.8076923076923077
+    },
+    {
+      "name": "Claude judge",
+      "tp": 26,
+      "fp": 34,
+      "tn": 25,
+      "fn": 0,
+      "accuracy": 0.6,
+      "precision": 0.43333333333333335,
+      "recall": 1
+    }
+  ],
+  "rows": [
+    {
+      "id": "p02",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay resolves the ambiguous 30-minute escalation clock by assuming it started about 15 minutes ago, and it drops the SEV1 escalation guidance."
+    },
+    {
+      "id": "p03",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay keeps the runbook steps and the on-call lead restriction but drops the SEV2 postmortem condition (only if it lasts more than 2 hours) and the SEV1 postmortem deadline (within 5 business days)."
+    },
+    {
+      "id": "p04",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay omits the SEV1 requirement to write a postmortem within 5 business days; everything else matches."
+    },
+    {
+      "id": "p01",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay drops the SEV1 escalation path (customers can't pay at all, page the incident commander) and the ambiguity about when the 30-minute clock starts, though the core steps and SEV2 guidance remain."
+    },
+    {
+      "id": "p05",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The core condition (error rate below 1% for 15 minutes) is the same, but the replay misstates the runbook's scope: it says only the on-call lead may flip the flag as a general rule, and claims the settlement job needs resuming, while the recorded answer said the runbook is silent on both points."
+    },
+    {
+      "id": "p07",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay drops the 1% monitoring-program consequence and says the runbook doesn't state that accepted disputes count toward the rate, whereas the recorded answer stated it as fact."
+    },
+    {
+      "id": "p08",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay drops the runbook step to pause the nightly settlement job while the backup gateway is active, and it adds a SEV1 postmortem deadline (5 business days) that the recorded answer never gave."
+    },
+    {
+      "id": "p06",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The 1% for 15 minutes answer is the same, but the replay drops the recorded caveats that the runbook is silent on who can switch back and on when to resume the settlement job, and it presents both as runbook instructions."
+    },
+    {
+      "id": "p10",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay keeps the three runbook steps but drops the SEV1 instruction and adds a new SEV2 postmortem condition, and it states as fact that customers can still pay."
+    },
+    {
+      "id": "p12",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the core 'don't run' conclusion, the 15-minute/1% switch-back condition and the 30-minute updates, but it drops the recorded point that only the on-call lead can flip the `payments-failover` flag."
+    },
+    {
+      "id": "p09",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay drops the instruction to page the incident commander if customers can't pay at all (SEV1), and it recasts the 30-minute escalation clock as ambiguous where the recorded answer counted it from when the latency started."
+    },
+    {
+      "id": "p13",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the SEV2 classification, 15-minute response, postmortem condition and SEV1 escalation, but drops the gateway runbook's specific instructions: the failover flag restriction and the 30-minute update cadence."
+    },
+    {
+      "id": "p14",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The core answer is the same (SEV1, written postmortem within 5 business days), but the replay drops the SEV2 downgrade caveat and adds a mixed-up deadline description."
+    },
+    {
+      "id": "p15",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay reaches the same conclusion (No), with the same SEV1/SEV3 reasoning, next-business-day response, approved ticket route and 4-hour expiry; the added 24-hour security reporting detail doesn't contradict the recorded answer."
+    },
+    {
+      "id": "p11",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The runbook steps, the on-call lead restriction and the SEV2 call all match, but the replay drops the recorded SEV1 requirement to write a postmortem and changes the 5-minute SEV1 timing from paging the incident commander to a general response."
+    },
+    {
+      "id": "p17",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same 30-day retention period, the same prohibited content (full card numbers and CVV), and the same source; only formatting differs."
+    },
+    {
+      "id": "p18",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same retry count (3), the same exponential delays (200, 400, 800 ms), the same 409 no-retry warning, and the same source."
+    },
+    {
+      "id": "p16",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay gives the same answer: do not run the job on the backup gateway because it double-counts (runbook step 3), and keep it paused until the primary has had 15 minutes of error rates below 1%. Its extra steps and its weaker caveat about other files do not contradict the recorded answer."
+    },
+    {
+      "id": "p19",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replayed answer gives the same 30-day retention period, the same prohibited content (full card numbers and CVV codes) and the same source; only the parenthetical placement differs."
+    },
+    {
+      "id": "p21",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same conclusion (no automatic processing), the same 120-day limit, the same routing to finance-ops, and the same source citation, differing only in wording."
+    },
+    {
+      "id": "p22",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay keeps the core guidance: don't retry, R-500 means the ledger write failed, and page the ledger team, citing the same runbook step. It only drops the optional dashboard check and the retry-policy note."
+    },
+    {
+      "id": "p20",
+      "source": "real: noise replay (no change)",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "Both say not to contest because disputes under $25 are accepted automatically, notify risk@ above 0.8% monthly chargeback rate, monitoring program at 1%, and note the dispute counts toward the rate."
+    },
+    {
+      "id": "p23",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "Both answers say not to retry, to page the ledger team, and that R-500 means the ledger write failed, citing the same runbook step; the replay only omits the note that the general retry policy does not override this."
+    },
+    {
+      "id": "p26",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same threshold decision, the same three attachments, the same portal, the same 7-day deadline with about 2 days left, and the same 0.8% and 1% rate consequences."
+    },
+    {
+      "id": "p24",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay gives the same conclusion and key facts: 0.9% is under the 1% monitoring threshold and over the 0.8% notice point, notify risk@ now, the 7-day response window, the $25 auto-accept rule, and the required evidence via the disputes portal."
+    },
+    {
+      "id": "p28",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "Both answers say no, but the replay drops the SEV3 classification with its next-business-day response and the 4-hour expiry on ticket-based access, and it adds a 24-hour security reporting requirement that the recorded answer never stated."
+    },
+    {
+      "id": "p29",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "Both say no, but the replay drops the approved-ticket route and the 4-hour expiry for production database access, and it does not state the SEV3 classification or next-business-day response."
+    },
+    {
+      "id": "p25",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the core answer (approved ticket, 4-hour expiry) but drops the data-export and break-glass rules and the refund error-code guidance that the recorded answer gave."
+    },
+    {
+      "id": "p32",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay gives the same 1% threshold, the 0.8% risk@ notification trigger, the 7-day response deadline, the $25 contest cutoff and the evidence to attach; it only omits the minor note that the incident severity policy doesn't apply and adds a mention of the disputes portal."
+    },
+    {
+      "id": "p27",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay gives the same threshold and notification answer but drops the recorded 7-day response deadline, the $25 contest/auto-accept rule with evidence requirements, and the note that the incident severity policy doesn't apply."
+    },
+    {
+      "id": "p30",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same contest decision, the same three attachments, portal submission, the same 7-day window with about 2 days left, default loss if missed, and the same 0.8% risk@ and 1% monitoring thresholds."
+    },
+    {
+      "id": "p31",
+      "source": "real: replay on Claude Haiku 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "Both say not to run the settlement job on the backup gateway because it double-counts, and to resume only after switching back to primary following 15 minutes of error rates below 1%."
+    },
+    {
+      "id": "p33",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the pause conclusion, the double-counting reason, the 15-minute/1% switch-back condition and the 30-minute updates, but omits that only the on-call lead can flip the `payments-failover` flag."
+    },
+    {
+      "id": "p35",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay hedges the recorded claim that accepted small chargebacks count toward the rate, saying the runbook doesn't state it directly, and shifts the 1% monitoring threshold to 'more than 1%'."
+    },
+    {
+      "id": "p34",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the three runbook steps and the 30-minute ambiguity but drops the severity guidance (SEV2 'payments degraded', 15-minute first response, SEV1 and paging the incident commander if customers can't pay)."
+    },
+    {
+      "id": "p36",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay drops the instruction that anyone who uses a break-glass account must report it to security within 24 hours, though the core ticket, 4-hour, and refund-code facts match."
+    },
+    {
+      "id": "p38",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay gives the same retry count (up to 3), the same backoff delays (200/400/800 ms) and the same HTTP 409 no-retry exception; the refund rules are extra context that doesn't contradict the recorded answer."
+    },
+    {
+      "id": "p37",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay gives the same severity, response time, postmortem condition and SEV1 escalation, but omits the gateway-outage runbook guidance (the payments-failover flag, which only the on-call lead may flip, and 30-minute updates in #payments-incidents)."
+    },
+    {
+      "id": "p39",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay gives the same switch-back condition (error rate below 1% for 15 minutes, step 5), the same on-call-lead restriction on the flag, and the same note that the runbook doesn't say when to resume the settlement job; its extra details (double-counting reason, 30-minute updates) don't contradict the recorded answer."
+    },
+    {
+      "id": "p40",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same conclusion (a postmortem is required, SEV1, due within 5 business days, the 2-hour rule applies only to SEV2) and the same Monday example. It omits the caveats about when the clock starts and who writes it, but adds no contradictions."
+    },
+    {
+      "id": "p42",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay drops the recorded instruction to report any break-glass account use to security within 24 hours, which matters for acting on the policy."
+    },
+    {
+      "id": "p45",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the approved ticket, 4-hour expiry and the no-export rule, but drops the break-glass/SEV1 rule with its 24-hour reporting requirement and all the refund runbook guidance (R-402, R-500, 120-day rule)."
+    },
+    {
+      "id": "p44",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay gives the same three runbook steps and the probable SEV2 call, but drops the SEV1 instruction (page the incident commander if customers can't pay at all) and the note that escalation is about 15 minutes away."
+    },
+    {
+      "id": "p46",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "Both answers say the refund cannot be processed automatically because it exceeds the 120-day limit, and both route it to finance-ops, citing the same runbook."
+    },
+    {
+      "id": "p41",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "Replay keeps the key instruction (don't retry, page the ledger team, ledger write failure, runbook step 3); it only omits the clarification about the general retry policy and adds non-contradicting extra details."
+    },
+    {
+      "id": "p43",
+      "source": "real: replay on Claude Opus 5.5",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same three runbook steps with the same numbers (12 pods, 85% DB CPU, 30-minute escalation), the same hedged SEV2 reading with a 15-minute response, and the same SEV1 escalation if payments fail entirely."
+    },
+    {
+      "id": "p47",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the evidence list, the 7-day deadline, about 2 days left and the contest decision, but drops the chargeback-rate warning (above 0.8% tell risk@, at 1% monitoring program) and the consequence of missing the deadline."
+    },
+    {
+      "id": "p50",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the 'No' and the SEV1/SEV3 reasoning, but drops the instruction to get an approved ticket for production database access and the 4-hour expiry, both of which matter for acting on the answer."
+    },
+    {
+      "id": "p49",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same core substance: yes, a postmortem is needed because it is a SEV1, due within 5 business days of the incident, and the 40-minute duration is irrelevant because the 2-hour threshold applies only to SEV2."
+    },
+    {
+      "id": "p48",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay gives the same core answer to the question asked (approved ticket, 4-hour expiry) and keeps the no-export-to-personal-device rule; the omitted material is extra related context."
+    },
+    {
+      "id": "p51",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay drops the recorded caveat that the runbook is ambiguous about whether the 30-minute escalation clock starts at alert start or at action, and omits the SEV1 escalation path (page the incident commander if customers can't pay at all)."
+    },
+    {
+      "id": "p52",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "Both answers say it cannot be processed automatically because it exceeds the 120-day limit, and both route it to finance-ops; the replay cites the same runbook (omitting only the step number)."
+    },
+    {
+      "id": "p53",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the SEV2 classification, 15-minute response and 2-hour postmortem condition, but drops the gateway runbook instructions (failover flag restricted to on-call lead, 30-minute updates in #payments-incidents) and the SEV1 escalation details (5-minute response, paging incident commander)."
+    },
+    {
+      "id": "p56",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "same",
+      "reason": "The replay gives the same core answer (error rate below 1% for 15 minutes, runbook step 5); it only omits the related side notes, which are not part of the answer to when the switch back can happen."
+    },
+    {
+      "id": "p54",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay reaches the same 'don't contest' conclusion but drops the chargeback-rate thresholds (0.8% notify risk team, 1% monitoring program) and the warning that this dispute still counts toward the rate."
+    },
+    {
+      "id": "p57",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay gives the same 'no, pause it' conclusion and reason but omits the instruction on when to resume (only after traffic is back on primary, after 15 minutes of error rates below 1%)."
+    },
+    {
+      "id": "p55",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay keeps the runbook steps and the on-call-lead restriction, but drops the SEV1 response requirements and the postmortem conditions that the recorded answer gave."
+    },
+    {
+      "id": "p59",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "same",
+      "judge": "same",
+      "reason": "The replay gives the same retry count (3), the same backoff delays (200/400/800 ms), the same HTTP 409 no-retry rule and the same source."
+    },
+    {
+      "id": "p58",
+      "source": "real: replay with an edited system prompt",
+      "label": "same",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay keeps the core conclusion (not safe, pause, double-counting) but drops the conditions for resuming and the other actionable instructions from the recorded answer."
+    },
+    {
+      "id": "s03",
+      "source": "synthetic: wrong number (edited from p17)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replayed answer states a 90-day retention period instead of the recorded 30 days, though the prohibited content (full card numbers, CVV) is the same."
+    },
+    {
+      "id": "s02",
+      "source": "synthetic: wrong number (edited from p59)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay gives different backoff delays (200 ms, 500 ms, 1 s) than the recorded 200 ms, 400 ms, 800 ms, although the retry count and the 409 rule match."
+    },
+    {
+      "id": "s04",
+      "source": "synthetic: wrong number (edited from p21)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay reaches the opposite conclusion (automatic processing allowed), cites a different cutoff (180 days instead of 120), and omits routing to finance-ops."
+    },
+    {
+      "id": "s05",
+      "source": "synthetic: wrong number (edited from p10)",
+      "label": "changed",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay says to scale checkout-api to 6 pods instead of 12, drops the SEV1 escalation guidance, and adds an unsupported postmortem condition."
+    },
+    {
+      "id": "s01",
+      "source": "synthetic: wrong number (edited from p18)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay states a maximum of 5 retries instead of 3, and still lists only three backoff delays, so the retry limit now contradicts the recorded answer."
+    },
+    {
+      "id": "s06",
+      "source": "synthetic: wrong number (edited from p26)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay states a 14-day deadline with 9 days left, whereas the recorded answer gave a 7-day deadline with about 2 days left."
+    },
+    {
+      "id": "s07",
+      "source": "synthetic: flipped conclusion (edited from p07)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay reverses the recommendation (contest vs. don't contest) and drops the under-$25 auto-accept rule, giving a different deadline rule instead."
+    },
+    {
+      "id": "s09",
+      "source": "synthetic: flipped conclusion (edited from p15)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay opens with 'Yes, as long as you report it', reversing the recorded 'No' and implying break-glass is allowed for a slow report, even though it later notes this isn't a SEV1."
+    },
+    {
+      "id": "s08",
+      "source": "synthetic: flipped conclusion (edited from p12)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay reverses the core conclusion (says it's safe to run, when the recorded answer says do not run because the job double-counts on the backup gateway) and drops the on-call-lead-only flag detail."
+    },
+    {
+      "id": "s10",
+      "source": "synthetic: flipped conclusion (edited from p13)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay classifies the incident as SEV1 with a 5-minute response and incident commander page, where the recorded answer said SEV2 with a 15-minute response; it also drops the failover and update-cadence details."
+    },
+    {
+      "id": "s11",
+      "source": "synthetic: flipped conclusion (edited from p14)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay opens with 'No, you don't need a postmortem' and says postmortems only apply to incidents over 2 hours, reversing the recorded 'Yes' conclusion for a SEV1 requiring a postmortem within 5 business days."
+    },
+    {
+      "id": "s13",
+      "source": "synthetic: lost the key instruction (edited from p03)",
+      "label": "changed",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay drops the answer to the second half of the question, that only the on-call lead may flip the failover flag, and also omits the postmortem requirements."
+    },
+    {
+      "id": "s12",
+      "source": "synthetic: flipped conclusion (edited from p24)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay concludes nobody needs to be told yet, contradicting the recorded instruction to notify the risk team now since 0.9% exceeds the 0.8% threshold, and it also says 'it's fine' rather than 'a problem'."
+    },
+    {
+      "id": "s14",
+      "source": "synthetic: lost the key instruction (edited from p23)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay recommends retrying once, directly contradicting the recorded 'do not retry, page the ledger team' instruction."
+    },
+    {
+      "id": "s15",
+      "source": "synthetic: lost the key instruction (edited from p22)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay drops the core instructions to not retry and to page the ledger team, and it attributes the dashboard check to step 3 as the main action instead of an optional extra."
+    },
+    {
+      "id": "s18",
+      "source": "synthetic: wrong owner (edited from p20)",
+      "label": "changed",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay names a different team to notify at the 0.8% threshold (security@ instead of risk@), which would send the user to the wrong contact."
+    },
+    {
+      "id": "s17",
+      "source": "synthetic: lost the key instruction (edited from p30)",
+      "label": "changed",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay gives a different submission method (reply to the card network's email instead of the disputes portal) and omits the required evidence list (order record, delivery proof, customer emails)."
+    },
+    {
+      "id": "s19",
+      "source": "synthetic: wrong owner (edited from p46)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay routes the refund to the support team, while the recorded answer says to send it to finance-ops, so the named handler is different."
+    },
+    {
+      "id": "s16",
+      "source": "synthetic: lost the key instruction (edited from p25)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay drops the approved-ticket requirement (saying a normal account suffices) and omits the 4-hour expiry, which contradicts the recorded answer's core facts."
+    },
+    {
+      "id": "s22",
+      "source": "synthetic: gave up (edited from p19)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay says it could not find the retention period and gives no answer, whereas the recorded answer gave 30 days and the prohibition on full card numbers and CVV codes."
+    },
+    {
+      "id": "s20",
+      "source": "synthetic: wrong owner (edited from p11)",
+      "label": "changed",
+      "facts": "same",
+      "judge": "changed",
+      "reason": "The replay says any payments-team engineer may flip `payments-failover`, contradicting the recorded answer that only the on-call lead can, which is the second half of the user's question."
+    },
+    {
+      "id": "s21",
+      "source": "synthetic: wrong owner (edited from p41)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay says to page the platform team instead of the ledger team, which is a different escalation target, and it drops the note that the general retry policy doesn't override this."
+    },
+    {
+      "id": "s23",
+      "source": "synthetic: gave up (edited from p38)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay gives up and says the information isn't available, whereas the recorded answer gave the retry count, backoff delays, and the 409 exception."
+    },
+    {
+      "id": "s24",
+      "source": "synthetic: gave up (edited from p40)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The recorded answer said a postmortem is required within 5 business days because a full checkout outage is a SEV1, while the replay says it can't tell and gives up."
+    },
+    {
+      "id": "s26",
+      "source": "synthetic: contradiction (edited from p36)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay states access lasts 30 days instead of the recorded 4 hours, and also drops the requirement to report break-glass use to security within 24 hours."
+    },
+    {
+      "id": "s25",
+      "source": "synthetic: contradiction (edited from p37)",
+      "label": "changed",
+      "facts": "changed",
+      "judge": "changed",
+      "reason": "The replay contradicts the recorded postmortem condition (every SEV2 needs one within 5 business days vs. only if the incident lasts over 2 hours) and omits the gateway runbook guidance."
+    }
+  ]
+}

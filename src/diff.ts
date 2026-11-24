@@ -1,5 +1,6 @@
 import { canonical, jsonChanges, keyFacts, overlap, type PathChange, textSimilarity } from "./json.js";
-import type { ReplayTier, ToolStep, Trace } from "./trace.js";
+import type { Judgement } from "./judge.js";
+import { type ReplayTier, type ToolStep, type Trace, taskText } from "./trace.js";
 
 /**
  * Compares a recorded run (baseline) with its replay (candidate): which tools were called, with what arguments,
@@ -28,6 +29,8 @@ export type Verdict = "same" | "changed" | "unreplayable" | "error";
 export interface TraceDiff {
   baselineId: string;
   candidateId: string;
+  /** The user's request that started the task. */
+  task: string;
   verdict: Verdict;
   firstDivergence: Divergence | null;
   tools: {
@@ -55,6 +58,10 @@ export interface TraceDiff {
     candidateStop: string | null;
     baselineText: string;
     candidateText: string;
+    /** Set when a Claude judge ruled on the answer; it then decides `changed`. */
+    judge?: Judgement;
+    /** Set when the judge was asked but failed; `changed` is then the key-facts result. */
+    judgeError?: string;
   };
   turns: { baseline: number; candidate: number };
   tokens: { baseline: { input: number; output: number }; candidate: { input: number; output: number } };
@@ -175,6 +182,7 @@ export function diffTraces(baseline: Trace, candidate: Trace): TraceDiff {
   return {
     baselineId: baseline.id,
     candidateId: candidate.id,
+    task: taskText(baseline),
     verdict,
     firstDivergence,
     tools: {
@@ -219,6 +227,19 @@ export interface RunSummary {
   costUsd: { baseline: number | null; candidate: number | null };
   latencyMs: { baseline: number; candidate: number };
   replayTiers: Partial<Record<ReplayTier, number>>;
+  /** Judge rulings (when --judge is on): how many, how many failed and fell back to key facts, and their cost. */
+  judge: { judged: number; failed: number; costUsd: number | null };
+  /** Recorded traces in the batch. Each is replayed `runs / traces` times. */
+  traces: number;
+  /** Traces that changed in more than half of their replays: what --fail-on-change fails on. */
+  changedTraces: number;
+  /** Traces whose final answer changed in more than half of their replays: what --fail-on answer fails on. */
+  answerChangedTraces: number;
+  /**
+   * Traces whose repeated replays disagreed (some same, some changed). A change on one of them may be noise, so
+   * look at how often it changed before calling it a regression. Empty when each trace was replayed once.
+   */
+  flaky: Array<{ baselineId: string; task: string; same: number; changed: number }>;
 }
 
 export function summarize(diffs: TraceDiff[]): RunSummary {
@@ -232,8 +253,16 @@ export function summarize(diffs: TraceDiff[]): RunSummary {
   let lb = 0;
   let lc = 0;
   const tiers: Partial<Record<ReplayTier, number>> = {};
+  const judge: RunSummary["judge"] = { judged: 0, failed: 0, costUsd: 0 };
   for (const d of diffs) {
     verdicts[d.verdict]++;
+    if (d.final.judge) {
+      judge.judged++;
+      const c = d.final.judge.usage?.costUsd;
+      if (c === null) judge.costUsd = null;
+      else if (c !== undefined && judge.costUsd !== null) judge.costUsd += c;
+    }
+    if (d.final.judgeError) judge.failed++;
     if (d.verdict === "same" || d.verdict === "changed") {
       comparable++;
       const names = d.tools.baseline.join("\u0000") === d.tools.candidate.join("\u0000");
@@ -258,7 +287,26 @@ export function summarize(diffs: TraceDiff[]): RunSummary {
     costUsd: { baseline: cb, candidate: cc },
     latencyMs: { baseline: lb, candidate: lc },
     replayTiers: tiers,
+    judge,
+    ...byTrace(diffs),
   };
+}
+
+function byTrace(diffs: TraceDiff[]): Pick<RunSummary, "traces" | "changedTraces" | "answerChangedTraces" | "flaky"> {
+  const groups = new Map<string, TraceDiff[]>();
+  for (const d of diffs) groups.set(d.baselineId, [...(groups.get(d.baselineId) ?? []), d]);
+  let changedTraces = 0;
+  let answerChangedTraces = 0;
+  const flaky: RunSummary["flaky"] = [];
+  for (const [baselineId, ds] of groups) {
+    const changed = ds.filter((d) => d.verdict === "changed").length;
+    const same = ds.filter((d) => d.verdict === "same").length;
+    if (changed > ds.length / 2) changedTraces++;
+    const answers = ds.filter((d) => d.verdict === "changed" && d.final.changed).length;
+    if (answers > ds.length / 2) answerChangedTraces++;
+    if (changed && same) flaky.push({ baselineId, task: ds[0]?.task ?? "", same, changed });
+  }
+  return { traces: groups.size, changedTraces, answerChangedTraces, flaky };
 }
 
 function round(n: number): number {

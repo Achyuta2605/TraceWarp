@@ -1,5 +1,5 @@
 import type { RunSummary, TraceDiff } from "./diff.js";
-import type { Trace } from "./trace.js";
+import { type Trace, taskText } from "./trace.js";
 
 /** Plain-text output for the CLI. */
 
@@ -9,11 +9,11 @@ export function money(n: number | null): string {
   return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(3)}`;
 }
 
-function pct(n: number): string {
+export function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-function change(before: number | null, after: number | null): string {
+export function change(before: number | null, after: number | null): string {
   if (before === null || after === null || before === 0) return "";
   const d = (after - before) / before;
   return ` (${d >= 0 ? "+" : ""}${Math.round(d * 100)}%)`;
@@ -24,16 +24,7 @@ function cut(s: string, n: number): string {
   return one.length > n ? `${one.slice(0, n - 1)}…` : one;
 }
 
-function firstUserText(t: Trace): string {
-  for (let i = t.request.messages.length - 1; i >= 0; i--) {
-    const m = t.request.messages[i];
-    if (m?.role !== "user") continue;
-    if (typeof m.content === "string") return m.content;
-    const text = m.content.find((b) => b.type === "text") as { text?: string } | undefined;
-    if (text?.text) return text.text;
-  }
-  return "";
-}
+const firstUserText = taskText;
 
 export function formatTraceList(traces: Trace[]): string {
   if (!traces.length) return "No traces yet. Record some with: tracewarp record -- <your agent command>";
@@ -66,7 +57,7 @@ export function formatTrace(t: Trace): string {
   return lines.join("\n");
 }
 
-function describeDivergence(d: TraceDiff): string {
+export function describeDivergence(d: TraceDiff): string {
   const f = d.firstDivergence;
   if (!f) return "no divergence";
   const at = `step ${f.step + 1}`;
@@ -105,10 +96,18 @@ export function formatDiff(d: TraceDiff): string {
   }
   lines.push(
     `  answer  ${d.final.changed ? "CHANGED" : "same facts"}: key facts ${pct(d.final.factOverlap)} shared, wording ${pct(d.final.similarity)} alike (${d.final.baselineStop} → ${d.final.candidateStop})` +
-      (d.final.missingFacts.length ? `; lost ${d.final.missingFacts.slice(0, 6).join(", ")}` : ""),
+      (d.final.missingFacts.length && !d.final.judge ? `; lost ${d.final.missingFacts.slice(0, 6).join(", ")}` : ""),
     `  cost    ${money(d.costUsd.baseline)} → ${money(d.costUsd.candidate)}${change(d.costUsd.baseline, d.costUsd.candidate)}` +
       `   time ${(d.latencyMs.baseline / 1000).toFixed(1)}s → ${(d.latencyMs.candidate / 1000).toFixed(1)}s`,
   );
+  if (d.final.judge) {
+    const j = d.final.judge;
+    lines.push(
+      `  judge   ${j.verdict === "changed" ? "CHANGED" : "same"} (${j.model}): ${cut(j.reason, 160)}` +
+        (j.lost.length ? `; lost: ${cut(j.lost.join("; "), 160)}` : ""),
+    );
+  } else if (d.final.judgeError)
+    lines.push(`  judge   failed, kept the key-facts result: ${cut(d.final.judgeError, 120)}`);
   const tiers = Object.entries(d.replayTiers)
     .map(([t, n]) => `${t} ${n}`)
     .join(", ");
@@ -128,5 +127,16 @@ export function formatSummary(s: RunSummary, label: string): string {
     `  cost${s.excluded ? ` (of the ${s.runs - s.excluded} comparable runs)` : ""} ${money(s.costUsd.baseline)} → ${money(s.costUsd.candidate)}${change(s.costUsd.baseline, s.costUsd.candidate)}` +
       ` · time ${(s.latencyMs.baseline / 1000).toFixed(1)}s → ${(s.latencyMs.candidate / 1000).toFixed(1)}s${change(s.latencyMs.baseline, s.latencyMs.candidate)}`,
     ...(tiers ? [`  tool calls answered by: ${tiers}`] : []),
+    ...(s.judge.judged || s.judge.failed
+      ? [`  judge: ${s.judge.judged} answers ruled, ${s.judge.failed} failed, cost ${money(s.judge.costUsd)}`]
+      : []),
+    ...(s.runs > s.traces
+      ? [
+          `  ${s.traces} traces × ${Math.round(s.runs / s.traces)} replays: ${s.changedTraces} changed in most replays, ${s.flaky.length} flaky (same in some, changed in others)`,
+          ...s.flaky
+            .slice(0, 10)
+            .map((f) => `    flaky ${f.baselineId}: changed ${f.changed}/${f.same + f.changed}  ${cut(f.task, 60)}`),
+        ]
+      : []),
   ].join("\n");
 }
