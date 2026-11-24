@@ -1,0 +1,132 @@
+import type { RunSummary, TraceDiff } from "./diff.js";
+import type { Trace } from "./trace.js";
+
+/** Plain-text output for the CLI. */
+
+export function money(n: number | null): string {
+  if (n === null) return "n/a";
+  if (n === 0) return "$0";
+  return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(3)}`;
+}
+
+function pct(n: number): string {
+  return `${Math.round(n * 100)}%`;
+}
+
+function change(before: number | null, after: number | null): string {
+  if (before === null || after === null || before === 0) return "";
+  const d = (after - before) / before;
+  return ` (${d >= 0 ? "+" : ""}${Math.round(d * 100)}%)`;
+}
+
+function cut(s: string, n: number): string {
+  const one = s.replace(/\s+/g, " ").trim();
+  return one.length > n ? `${one.slice(0, n - 1)}…` : one;
+}
+
+function firstUserText(t: Trace): string {
+  for (let i = t.request.messages.length - 1; i >= 0; i--) {
+    const m = t.request.messages[i];
+    if (m?.role !== "user") continue;
+    if (typeof m.content === "string") return m.content;
+    const text = m.content.find((b) => b.type === "text") as { text?: string } | undefined;
+    if (text?.text) return text.text;
+  }
+  return "";
+}
+
+export function formatTraceList(traces: Trace[]): string {
+  if (!traces.length) return "No traces yet. Record some with: tracewarp record -- <your agent command>";
+  const rows = traces.map((t) => {
+    const when = new Date(t.createdAt).toISOString().replace("T", " ").slice(0, 16);
+    return `${t.id.padEnd(22)} ${when}  ${t.request.model.padEnd(18)} ${String(t.steps.length).padStart(3)} calls  ${t.status.padEnd(10)} ${cut(firstUserText(t), 50)}`;
+  });
+  return [
+    `${"ID".padEnd(22)} ${"RECORDED (UTC)".padEnd(17)} ${"MODEL".padEnd(18)} TOOLS      STATUS     TASK`,
+    ...rows,
+  ].join("\n");
+}
+
+export function formatTrace(t: Trace): string {
+  const lines = [
+    `${t.id}  ${t.status}  ${t.request.model}  ${t.final.turns} turns, ${t.steps.length} tool calls, ${money(t.usage.costUsd)}, ${(t.usage.latencyMs / 1000).toFixed(1)}s`,
+    `Task: ${cut(firstUserText(t), 200)}`,
+  ];
+  if (t.replay) lines.push(`Replay of ${t.replay.baselineId} with ${JSON.stringify(t.replay.changes)}`);
+  t.steps.forEach((s, i) => {
+    const where = s.server ? ` [${s.server}]` : "";
+    const tier = s.replay
+      ? ` (${s.replay.tier}${s.replay.similarity !== undefined ? ` ${s.replay.similarity}` : ""})`
+      : "";
+    lines.push(
+      `  ${String(i + 1).padStart(2)}. ${s.name}${where}${tier} ${cut(JSON.stringify(s.input), 90)}${s.isError ? "  ERROR" : ""}`,
+    );
+  });
+  lines.push(`Final (${t.final.stopReason}): ${cut(t.final.text, 300)}`);
+  return lines.join("\n");
+}
+
+function describeDivergence(d: TraceDiff): string {
+  const f = d.firstDivergence;
+  if (!f) return "no divergence";
+  const at = `step ${f.step + 1}`;
+  switch (f.kind) {
+    case "tool":
+      return `${at}: called ${f.candidate} instead of ${f.baseline}`;
+    case "arguments":
+      return `${at}: same tool, different arguments`;
+    case "extra_call":
+      return `${at}: made an extra call to ${f.candidate}`;
+    case "missing_call":
+      return `${at}: stopped before calling ${f.baseline}`;
+    case "stop_reason":
+      return `ended differently (${f.baseline} → ${f.candidate})`;
+    case "final_answer":
+      return "same tool path, different final answer";
+  }
+}
+
+export function formatDiff(d: TraceDiff): string {
+  const lines = [
+    `${d.baselineId} → ${d.candidateId}: ${d.verdict.toUpperCase()}  (${describeDivergence(d)})`,
+    `  tools   ${d.tools.baseline.join(" → ") || "(none)"}`,
+    `  replay  ${d.tools.candidate.join(" → ") || "(none)"}`,
+  ];
+  if (d.tools.added.length) lines.push(`  added   ${d.tools.added.join(", ")}`);
+  if (d.tools.removed.length) lines.push(`  removed ${d.tools.removed.join(", ")}`);
+  for (const a of d.tools.argChanges.slice(0, 5)) {
+    const parts = a.changes
+      .slice(0, 3)
+      .map(
+        (c) =>
+          `${c.path || "(input)"}: ${cut(JSON.stringify(c.before) ?? "∅", 40)} → ${cut(JSON.stringify(c.after) ?? "∅", 40)}`,
+      );
+    lines.push(`  args    ${a.name} #${a.candidateStep + 1}: ${parts.join("; ")}`);
+  }
+  lines.push(
+    `  answer  ${d.final.changed ? "CHANGED" : "same facts"}: key facts ${pct(d.final.factOverlap)} shared, wording ${pct(d.final.similarity)} alike (${d.final.baselineStop} → ${d.final.candidateStop})` +
+      (d.final.missingFacts.length ? `; lost ${d.final.missingFacts.slice(0, 6).join(", ")}` : ""),
+    `  cost    ${money(d.costUsd.baseline)} → ${money(d.costUsd.candidate)}${change(d.costUsd.baseline, d.costUsd.candidate)}` +
+      `   time ${(d.latencyMs.baseline / 1000).toFixed(1)}s → ${(d.latencyMs.candidate / 1000).toFixed(1)}s`,
+  );
+  const tiers = Object.entries(d.replayTiers)
+    .map(([t, n]) => `${t} ${n}`)
+    .join(", ");
+  if (tiers) lines.push(`  answered by: ${tiers}`);
+  return lines.join("\n");
+}
+
+export function formatSummary(s: RunSummary, label: string): string {
+  const v = s.verdicts;
+  const tiers = Object.entries(s.replayTiers)
+    .map(([t, n]) => `${t} ${n}`)
+    .join(", ");
+  return [
+    `${label}: ${s.runs} runs replayed`,
+    `  same ${v.same} · changed ${v.changed} · unreplayable ${v.unreplayable} · error ${v.error}`,
+    `  tool path changed ${pct(s.toolPathChanged)} · arguments drifted ${pct(s.argumentsDrifted)} · final answer changed ${pct(s.answerChanged)}`,
+    `  cost ${money(s.costUsd.baseline)} → ${money(s.costUsd.candidate)}${change(s.costUsd.baseline, s.costUsd.candidate)}` +
+      ` · time ${(s.latencyMs.baseline / 1000).toFixed(1)}s → ${(s.latencyMs.candidate / 1000).toFixed(1)}s${change(s.latencyMs.baseline, s.latencyMs.candidate)}`,
+    ...(tiers ? [`  tool calls answered by: ${tiers}`] : []),
+  ].join("\n");
+}
