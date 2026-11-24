@@ -1,0 +1,5 @@
+What should I do when a refund fails with error R-500?
+How many times do we retry payment gateway calls, and what are the backoff delays?
+How long do we keep application logs, and what must never appear in them?
+Checkout p95 latency has been 950 ms for 15 minutes. What are the steps?
+A customer wants a refund for a purchase from 150 days ago. Can we process it automatically? Who handles it?

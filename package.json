@@ -1,0 +1,64 @@
+{
+  "name": "tracewarp",
+  "version": "0.1.0",
+  "description": "Record real AI agent runs, replay them against a new model, prompt or toolset with recorded tool results, and see exactly where behavior changed.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "tracewarp": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "npm run build && vitest run",
+    "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Achyuta2605/TraceWarp.git"
+  },
+  "keywords": [
+    "ai-agents",
+    "evals",
+    "regression-testing",
+    "replay",
+    "llm",
+    "claude",
+    "mcp",
+    "model-migration"
+  ],
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "commander": "^15.1.0",
+    "cross-spawn": "^7.0.6",
+    "undici": "^7.30.2",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^13.2.0"
+  }
+}
