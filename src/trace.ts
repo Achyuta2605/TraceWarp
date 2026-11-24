@@ -62,6 +62,8 @@ export interface ReplayMeta {
   changes: Record<string, unknown>;
   warnings: string[];
   error?: string;
+  /** HTTP status of the API error that ended the replay, when there was one. */
+  errorStatus?: number;
 }
 
 export interface Trace {
@@ -73,6 +75,8 @@ export interface Trace {
   status: TraceStatus;
   /** The first request of the task, minus `stream`. Its messages are where a replay starts. */
   request: Record<string, unknown> & { model: string; messages: MessageParam[] };
+  /** Request headers a replay must resend, such as anthropic-beta. */
+  headers?: Record<string, string>;
   exchanges: Exchange[];
   steps: ToolStep[];
   final: { text: string; stopReason: string | null; turns: number };
@@ -80,9 +84,12 @@ export interface Trace {
   replay?: ReplayMeta;
 }
 
+/** Trace ids become file names, so only these characters are allowed. */
+export const TRACE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
 const traceSchema = z.looseObject({
   version: z.literal(TRACE_VERSION),
-  id: z.string().min(1),
+  id: z.string().regex(TRACE_ID_PATTERN, "must contain only letters, digits, _ and -"),
   createdAt: z.number(),
   source: z.enum(["proxy", "sdk", "replay", "import"]),
   status: z.enum(["complete", "incomplete", "unreplayable", "max_turns", "error"]),
@@ -226,10 +233,32 @@ export class TraceStore {
     const ids = this.ids();
     const exact = ids.find((id) => id === ref);
     const matches = exact ? [exact] : ids.filter((id) => id.startsWith(ref));
-    if (matches.length === 0) throw new TraceFormatError(`no trace "${ref}" in ${this.tracesDir}`);
+    if (matches.length === 0) {
+      const replayed = this.findReplay(ref);
+      if (replayed) return parseTrace(readFileSync(replayed, "utf8"), replayed);
+      throw new TraceFormatError(`no trace "${ref}" in ${this.tracesDir}`);
+    }
     if (matches.length > 1) throw new TraceFormatError(`"${ref}" matches ${matches.length} traces; use more of the id`);
     const path = join(this.tracesDir, `${matches[0]}.json`);
     return parseTrace(readFileSync(path, "utf8"), path);
+  }
+
+  /** A replayed trace (rp_...) saved under runs/<run>/candidates, by id or unique prefix. */
+  private findReplay(ref: string): string | undefined {
+    if (!TRACE_ID_PATTERN.test(ref) || !existsSync(this.runsDir)) return undefined;
+    const found: string[] = [];
+    for (const run of readdirSync(this.runsDir)) {
+      const dir = join(this.runsDir, run, "candidates");
+      if (!existsSync(dir)) continue;
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith(".json")) continue;
+        const id = f.slice(0, -5);
+        if (id === ref) return join(dir, f);
+        if (id.startsWith(ref)) found.push(join(dir, f));
+      }
+    }
+    if (found.length > 1) throw new TraceFormatError(`"${ref}" matches ${found.length} replays; use more of the id`);
+    return found[0];
   }
 
   ids(): string[] {

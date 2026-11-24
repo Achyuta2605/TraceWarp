@@ -100,8 +100,9 @@ function levenshtein(a: string, b: string): number {
 }
 
 /**
- * How alike two tool inputs are, in [0, 1]. Every leaf path counts once; a path on one side only scores 0,
- * strings score by text similarity and numbers must match to within 1%.
+ * How alike two tool inputs are, in [0, 1]. Every leaf path counts once; a path on one side only scores 0.
+ * Prose strings score by text similarity; numbers and identifier-like strings (ids, codes, paths) must match
+ * exactly, because "order 1001" and "order 1002" are different calls however alike they look.
  */
 export function inputSimilarity(a: unknown, b: unknown): number {
   const x = flatten(a);
@@ -118,12 +119,27 @@ export function inputSimilarity(a: unknown, b: unknown): number {
 
 function leafSimilarity(a: unknown, b: unknown): number {
   if (deepEqual(a, b)) return 1;
-  if (typeof a === "string" && typeof b === "string") return textSimilarity(a, b);
-  if (typeof a === "number" && typeof b === "number") {
-    const scale = Math.max(Math.abs(a), Math.abs(b));
-    return scale > 0 && Math.abs(a - b) / scale <= 0.01 ? 1 : 0;
+  if (typeof a === "string" && typeof b === "string") {
+    if (isIdentifier(a) || isIdentifier(b)) return sameIdentifier(a, b) ? 1 : 0;
+    return textSimilarity(a, b);
   }
   return 0;
+}
+
+/** Identifiers compare exactly, apart from the spelling of a relative path ("./src/a.ts" = "src/a.ts"). */
+function sameIdentifier(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s
+      .trim()
+      .replace(/^(\.\/)+/, "")
+      .replace(/\/+$/, "");
+  return norm(a) === norm(b);
+}
+
+/** One token with a digit or a path/URL separator in it: R-500, 2026-11-24, ord_8f2a, runbooks/high-latency.md. */
+export function isIdentifier(s: string): boolean {
+  const t = s.trim();
+  return t.length > 0 && !/\s/.test(t) && (/\d/.test(t) || /[/\\:]/.test(t) || /\.[a-z0-9]+$/i.test(t));
 }
 
 /**

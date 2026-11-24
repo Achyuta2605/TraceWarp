@@ -125,7 +125,7 @@ export function formatSummary(s: RunSummary, label: string): string {
     `${label}: ${s.runs} runs replayed`,
     `  same ${v.same} · changed ${v.changed} · unreplayable ${v.unreplayable} · error ${v.error}`,
     `  tool path changed ${pct(s.toolPathChanged)} · arguments drifted ${pct(s.argumentsDrifted)} · final answer changed ${pct(s.answerChanged)}`,
-    `  cost ${money(s.costUsd.baseline)} → ${money(s.costUsd.candidate)}${change(s.costUsd.baseline, s.costUsd.candidate)}` +
+    `  cost${s.excluded ? ` (of the ${s.runs - s.excluded} comparable runs)` : ""} ${money(s.costUsd.baseline)} → ${money(s.costUsd.candidate)}${change(s.costUsd.baseline, s.costUsd.candidate)}` +
       ` · time ${(s.latencyMs.baseline / 1000).toFixed(1)}s → ${(s.latencyMs.candidate / 1000).toFixed(1)}s${change(s.latencyMs.baseline, s.latencyMs.candidate)}`,
     ...(tiers ? [`  tool calls answered by: ${tiers}`] : []),
   ].join("\n");

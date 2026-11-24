@@ -81,15 +81,30 @@ const client = new Anthropic({ fetch: recordingFetch(recorder) });
 When you move to a model that rejects settings the old one took (sampling settings on Claude Opus 5.5, disabled
 thinking, forced `tool_choice`), TraceWarp drops or rewrites them and prints a note, instead of failing every run.
 
+### In CI
+
+```bash
+tracewarp replay --all --model claude-sonnet-5-5 --fail-on-change
+```
+
+Exit codes: `0` done, `1` a run changed (only with `--fail-on-change`), `2` a replay failed with an error. A run
+stops early if the API refuses the key. Traces that did not finish when recorded are skipped unless you pass
+`--include-incomplete`.
+
+Calls go to `TRACEWARP_UPSTREAM`, else the `ANTHROPIC_BASE_URL` your agent would have used (a company gateway, for
+example), else `https://api.anthropic.com`. The recording keeps `anthropic-beta` headers so a replay sends the same
+beta flags; API keys are never written to a trace.
+
 ## How tool calls are answered
 
 The replayed model runs its own loop from the recorded starting messages. Each tool call it makes goes down these
 tiers, and every step in the report says which one answered it:
 
 1. **exact**: the same call (same tool, same arguments) is in the recording.
-2. **fuzzy**: a close call is in the recording (same tool, arguments at least 85% alike), e.g. `"paris "` vs `"Paris"`.
-3. **live**: the tool is marked read-only in `tracewarp.yaml` and connected to a real MCP server, so it is safe to
-   call for real.
+2. **live**: the tool is marked read-only in `tracewarp.yaml` and connected to a real MCP server, so it is safe to
+   call for real. A live tool skips fuzzy matching: the true answer beats a recorded one for a similar call.
+3. **fuzzy**: a close call is in the recording (same tool, arguments at least 85% alike), e.g. `"paris "` vs
+   `"Paris"`. Numbers, ids, codes and paths must match exactly: `R-500` never answers for `R-501`.
 4. **simulated**: off by default. A cheap model (Claude Haiku 5.5) writes a plausible result from the tool's
    definition and the recorded examples.
 5. **unreplayable**: nothing could answer it. By default the run stops here and is reported as unreplayable,
@@ -122,13 +137,14 @@ For every run:
 - **cost and time**, priced from the token usage of each turn.
 
 And for a batch: how many runs stayed the same, changed or could not be replayed, and the share whose tool path
-changed, whose arguments drifted and whose answer changed. Each run is saved under `.tracewarp/runs/<id>/`.
+changed, whose arguments drifted and whose answer changed. Cost and time totals count only the runs that could be
+compared, so a replay that stopped early never looks cheap. Each run is saved under `.tracewarp/runs/<id>/`.
 
 ## AgentOverwatch
 
 If your MCP servers run behind AgentOverwatch, `tracewarp import-overwatch` reads its log (read-only) and tags each
 recorded tool call with the MCP server that handled it, the server's own latency, and whether the gateway blocked
-the call.
+the call. It needs the optional `better-sqlite3` package, which npm installs when it can build it.
 
 ## Commands
 
@@ -156,7 +172,7 @@ prompts and tool results, so treat them like logs: keep them out of git unless t
 
 ```bash
 npm install
-npm test          # build + 44 tests, no network or API key needed
+npm test          # build + 69 tests, no network or API key needed
 npm run lint && npm run typecheck
 ```
 

@@ -1,10 +1,23 @@
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
 import { canonical } from "./json.js";
 import { mcpToolName } from "./live.js";
 import type { Trace } from "./trace.js";
+
+type DatabaseCtor = typeof import("better-sqlite3");
+
+/** better-sqlite3 is optional (a native module): it is only loaded when an AgentOverwatch log is read. */
+function loadSqlite(): DatabaseCtor {
+  try {
+    return createRequire(import.meta.url)("better-sqlite3") as DatabaseCtor;
+  } catch (e) {
+    throw new Error(
+      `reading an AgentOverwatch log needs the optional better-sqlite3 package (npm install better-sqlite3): ${(e as Error).message}`,
+    );
+  }
+}
 
 /**
  * Reads the call log of AgentOverwatch (the MCP security gateway) and attaches what it knows to recorded tool
@@ -38,6 +51,7 @@ const WINDOW_MS = 10 * 60 * 1000;
 
 export function enrichFromOverwatch(traces: Trace[], dbPath: string = defaultOverwatchDb()): EnrichResult {
   if (!existsSync(dbPath)) throw new Error(`no AgentOverwatch log at ${dbPath}`);
+  const Database = loadSqlite();
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
   try {
     const stmt = db.prepare(

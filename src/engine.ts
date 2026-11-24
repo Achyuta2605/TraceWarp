@@ -49,13 +49,18 @@ export function candidateRequest(
 ): { body: Record<string, unknown>; warnings: string[] } {
   const warnings: string[] = [];
   const { messages: _messages, ...rest } = structuredClone(recorded);
-  const body: Record<string, unknown> = { ...rest, ...(changes.params ?? {}) };
+  const body: Record<string, unknown> = mergeParams(rest, changes.params ?? {});
   if (changes.model) body.model = changes.model;
   if (changes.system !== undefined) body.system = changes.system;
   if (Array.isArray(body.tools)) {
     const known = new Set((body.tools as { name?: string }[]).map((t) => t.name));
     for (const name of [...Object.keys(changes.toolDescriptions ?? {}), ...(changes.removeTools ?? [])]) {
       if (!known.has(name)) warnings.push(`no tool named "${name}" in the recorded request`);
+    }
+    for (const t of body.tools as { name?: string; type?: string }[]) {
+      if (t.name && changes.toolDescriptions?.[t.name] !== undefined && t.type && t.type !== "custom") {
+        warnings.push(`"${t.name}" is a server tool (${t.type}); the API may reject a description for it`);
+      }
     }
     body.tools = (body.tools as Record<string, unknown>[])
       .filter((t) => !changes.removeTools?.includes(String(t.name)))
@@ -96,25 +101,64 @@ export function candidateRequest(
   return { body, warnings };
 }
 
-/** Shapes a recorded or live tool result into tool_result content the API accepts. */
-function toResultContent(content: unknown): string | Record<string, unknown>[] {
+/** Request settings with `params` laid over them; object settings (output_config, thinking) merge one level deep. */
+export function mergeParams(base: Record<string, unknown>, params: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(params)) {
+    const prev = out[k];
+    out[k] = isPlainObject(prev) && isPlainObject(v) ? { ...prev, ...v } : v;
+  }
+  return out;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+const API_BLOCKS = new Set(["text", "image", "document", "search_result"]);
+
+/**
+ * Shapes a recorded or live tool result into tool_result content the API accepts. Recorded results are already
+ * in API form; live ones come from MCP, whose image, audio and resource blocks have their own shapes.
+ */
+export function toResultContent(content: unknown): string | Record<string, unknown>[] {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    const blocks = content.filter(
-      (b) =>
-        b &&
-        typeof b === "object" &&
-        ["text", "image", "document", "search_result"].includes((b as { type?: string }).type ?? ""),
-    ) as Record<string, unknown>[];
-    if (blocks.length === content.length) return blocks;
-    return JSON.stringify(content);
+    const blocks: Record<string, unknown>[] = [];
+    for (const raw of content) {
+      const b = fromMcpBlock(raw);
+      if (!b) return JSON.stringify(content);
+      blocks.push(b);
+    }
+    return blocks;
   }
   return content === null || content === undefined ? "" : JSON.stringify(content);
+}
+
+function fromMcpBlock(raw: unknown): Record<string, unknown> | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const type = String(raw.type ?? "");
+  if (type === "image" && typeof raw.data === "string") {
+    return { type: "image", source: { type: "base64", media_type: raw.mimeType ?? "image/png", data: raw.data } };
+  }
+  if (API_BLOCKS.has(type)) {
+    // MCP text blocks may carry annotations/_meta, which the API rejects.
+    return type === "text" ? { type: "text", text: String(raw.text ?? "") } : raw;
+  }
+  if (type === "resource" && isPlainObject(raw.resource)) {
+    const r = raw.resource;
+    const text = typeof r.text === "string" ? r.text : `[binary resource ${String(r.mimeType ?? "")}]`;
+    return { type: "text", text: `${String(r.uri ?? "resource")}\n${text}` };
+  }
+  if (type === "resource_link") return { type: "text", text: `[resource link] ${String(raw.uri ?? "")}` };
+  if (type === "audio") return { type: "text", text: `[audio ${String(raw.mimeType ?? "")}, not shown]` };
+  return undefined;
 }
 
 export async function replay(baseline: Trace, changes: Changes, opts: ReplayOptions): Promise<Trace> {
   const config = opts.config ?? defaultConfig();
   const { body: base, warnings } = candidateRequest(baseline.request, changes);
+  const first = structuredClone(base);
   const ownLive = !opts.live && Object.keys(config.servers).length > 0;
   const live = opts.live ?? (ownLive ? new LiveTools(config.servers) : undefined);
   const resolver = new Resolver(baseline.steps, {
@@ -130,16 +174,19 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
   let appended: MessageParam[] = [];
   let status: Trace["status"] = "max_turns";
   let error: string | undefined;
+  let errorStatus: number | undefined;
 
   try {
     for (let turn = 0; turn < config.replay.maxTurns; turn++) {
       const startedAt = Date.now();
       let response: Exchange["response"];
       try {
-        response = await opts.provider.create({ ...base, messages });
+        response = await opts.provider.create({ ...base, messages }, baseline.headers);
       } catch (e) {
         status = "error";
         error = (e as Error).message;
+        const code = (e as { status?: unknown }).status;
+        if (typeof code === "number") errorStatus = code;
         break;
       }
       exchanges.push({ startedAt, latencyMs: Date.now() - startedAt, appended, response });
@@ -167,6 +214,12 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
           ...(answer.isError ? { is_error: true } : {}),
         });
       }
+      // A forced tool_choice is almost always meant for the first turn only; forcing it on every turn would loop.
+      if (turn === 0 && isForced(base.tool_choice)) {
+        const { name: _name, ...rest } = base.tool_choice as Record<string, unknown>;
+        base.tool_choice = { ...rest, type: "auto" };
+        warnings.push("tool_choice was forced; it applies to the first turn only and is auto after that");
+      }
       const user = { role: "user", content: results } as unknown as MessageParam;
       messages.push(user);
       appended = [user];
@@ -185,9 +238,16 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
     source: "replay",
     ...(baseline.label ? { label: baseline.label } : {}),
     status,
-    request: { ...base, model: String(base.model), messages: baseline.request.messages },
+    request: { ...first, model: String(first.model), messages: baseline.request.messages },
+    ...(baseline.headers ? { headers: baseline.headers } : {}),
     exchanges,
-    replay: { baselineId: baseline.id, changes: describeChanges(changes), warnings, ...(error ? { error } : {}) },
+    replay: {
+      baselineId: baseline.id,
+      changes: describeChanges(changes),
+      warnings,
+      ...(error ? { error } : {}),
+      ...(errorStatus ? { errorStatus } : {}),
+    },
   });
   // A replay that stopped on a miss has no next exchange carrying the results; take them from the answers.
   for (const step of trace.steps) {
@@ -200,6 +260,11 @@ export async function replay(baseline: Trace, changes: Changes, opts: ReplayOpti
     }
   }
   return trace;
+}
+
+function isForced(choice: unknown): boolean {
+  const t = (choice as { type?: string } | undefined)?.type;
+  return t === "any" || t === "tool";
 }
 
 function describeChanges(c: Changes): Record<string, unknown> {

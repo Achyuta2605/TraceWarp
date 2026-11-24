@@ -18,6 +18,8 @@ import {
 export interface RecordedCall {
   /** The JSON body sent to POST /v1/messages. */
   body: Record<string, unknown>;
+  /** Request headers a replay needs (anthropic-beta, anthropic-version). Never credentials. */
+  headers?: Record<string, string>;
   response: Message;
   startedAt: number;
   latencyMs: number;
@@ -27,6 +29,11 @@ interface OpenTrace {
   id: string;
   createdAt: number;
   request: Trace["request"];
+  headers: Record<string, string>;
+  /** Model and system text: a call only joins a trace by message prefix when these match. */
+  fingerprint: string;
+  /** Tool names of the last call. A later call may add tools (loaded on demand) but not drop them. */
+  tools: Set<string>;
   exchanges: Exchange[];
   /** The conversation as the next call should resend it: last request messages plus the reply. */
   expected: MessageParam[];
@@ -64,18 +71,22 @@ export class Recorder {
 
   record(call: RecordedCall): void {
     const messages = Array.isArray(call.body.messages) ? (call.body.messages as MessageParam[]) : [];
-    const match = this.findOpen(messages);
+    const fingerprint = fingerprintOf(call.body);
+    const match = this.findOpen(messages, fingerprint, toolNames(call.body));
     let t: OpenTrace;
     let appended: MessageParam[];
     if (match) {
       t = match;
       appended = appendedSince(messages, t.expected.length);
     } else {
-      const { stream: _stream, messages: _messages, ...rest } = call.body;
+      const { stream: _stream, messages: _messages, ...rest } = redact(call.body);
       t = {
         id: newTraceId(),
         createdAt: call.startedAt,
         request: { ...rest, model: String(call.body.model ?? "unknown"), messages },
+        headers: { ...(call.headers ?? {}) },
+        fingerprint,
+        tools: toolNames(call.body),
         exchanges: [],
         expected: [],
         pendingToolIds: new Set(),
@@ -86,6 +97,7 @@ export class Recorder {
     }
     t.exchanges.push({ startedAt: call.startedAt, latencyMs: call.latencyMs, appended, response: call.response });
     t.expected = [...messages, { role: "assistant", content: call.response.content as MessageParam["content"] }];
+    t.tools = toolNames(call.body);
     t.pendingToolIds = new Set(call.response.content.filter((b) => b.type === "tool_use").map((b) => b.id));
     if (!CONTINUE_REASONS.has(call.response.stop_reason ?? "")) this.finish(t, "complete");
   }
@@ -95,7 +107,7 @@ export class Recorder {
     for (const t of [...this.open]) this.finish(t, "incomplete");
   }
 
-  private findOpen(messages: MessageParam[]): OpenTrace | undefined {
+  private findOpen(messages: MessageParam[], fingerprint: string, tools: Set<string>): OpenTrace | undefined {
     const answered = new Set<string>();
     for (const m of messages) {
       if (m.role === "user" && typeof m.content !== "string") {
@@ -109,6 +121,7 @@ export class Recorder {
     }
     let best: OpenTrace | undefined;
     for (const t of this.open) {
+      if (t.fingerprint !== fingerprint || [...t.tools].some((n) => !tools.has(n))) continue;
       if (messages.length > t.expected.length && isPrefix(t.expected, messages)) {
         if (!best || t.expected.length > best.expected.length) best = t;
       }
@@ -125,12 +138,38 @@ export class Recorder {
       ...(this.opts.label ? { label: this.opts.label } : {}),
       status,
       request: t.request,
+      ...(Object.keys(t.headers).length ? { headers: t.headers } : {}),
       exchanges: t.exchanges,
     });
     const path = this.store.save(trace);
     this.written++;
     this.opts.onTrace?.(trace, path);
   }
+}
+
+/**
+ * What makes two calls part of the same agent: model and system text (cache markers ignored). With the tool list
+ * (see findOpen), it keeps two agents or sub-agents that start with the same user message in separate traces.
+ */
+function fingerprintOf(body: Record<string, unknown>): string {
+  const s = body.system;
+  const system = Array.isArray(s) ? s.map((b) => String((b as { text?: unknown }).text ?? "")).join("\n") : (s ?? "");
+  return canonical({ model: body.model ?? null, system });
+}
+
+function toolNames(body: Record<string, unknown>): Set<string> {
+  return new Set(Array.isArray(body.tools) ? (body.tools as { name?: unknown }[]).map((t) => String(t.name)) : []);
+}
+
+/** Never write credentials into a trace: MCP connector tokens are replaced, keeping the field so it shows. */
+function redact(body: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(body.mcp_servers)) return body;
+  return {
+    ...body,
+    mcp_servers: (body.mcp_servers as Record<string, unknown>[]).map((s) =>
+      s && typeof s === "object" && "authorization_token" in s ? { ...s, authorization_token: "[redacted]" } : s,
+    ),
+  };
 }
 
 /** Messages after the last assistant turn, or after `known` messages when there is none. */

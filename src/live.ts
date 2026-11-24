@@ -1,5 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ServerConfig } from "./config.js";
 
 /**
@@ -26,7 +26,8 @@ export class LiveTools {
     const transport = new StdioClientTransport({
       command,
       args,
-      env: { ...(process.env as Record<string, string>), ...cfg.env },
+      // The SDK's safe default set (PATH, HOME, ...) plus what the config names; not every secret in our env.
+      env: { ...getDefaultEnvironment(), ...cfg.env },
       ...(cfg.cwd ? { cwd: cfg.cwd } : {}),
       stderr: "ignore",
     });

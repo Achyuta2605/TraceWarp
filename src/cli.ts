@@ -29,9 +29,9 @@ function collect(value: string, all: string[]): string[] {
   return [...all, value];
 }
 
-function fail(message: string): never {
+function fail(message: string, code = 1): never {
   process.stderr.write(`${CLI_NAME}: ${message}\n`);
-  process.exit(1);
+  process.exit(code);
 }
 
 const STARTER_CONFIG = `# ${PRODUCT_NAME} replay settings. Every key is optional.
@@ -72,7 +72,10 @@ program
   .argument("[args...]", "arguments for the agent")
   .option("-p, --port <port>", "proxy port (default: any free port)", positiveInt)
   .option("-l, --label <label>", "a name to tag these traces with, e.g. the agent or test suite")
-  .option("--upstream <url>", `where to forward calls (default: $${UPSTREAM_ENV_VAR} or ${DEFAULT_UPSTREAM})`)
+  .option(
+    "--upstream <url>",
+    `where to forward calls (default: $${UPSTREAM_ENV_VAR}, then $ANTHROPIC_BASE_URL, then ${DEFAULT_UPSTREAM})`,
+  )
   .passThroughOptions()
   .addHelpText(
     "after",
@@ -109,8 +112,15 @@ Examples:
         process.stderr.write(
           `[${CLI_NAME}] recording proxy on ${proxy.url}. Set ANTHROPIC_BASE_URL=${proxy.url} and run your agent. Ctrl+C to stop.\n`,
         );
-        process.on("SIGINT", () => void stop(0));
-        process.on("SIGTERM", () => void stop(0));
+        let stopping = false;
+        for (const sig of ["SIGINT", "SIGTERM"] as const) {
+          process.on(sig, () => {
+            // A second Ctrl+C exits at once, even if a call in flight is stuck.
+            if (stopping) process.exit(130);
+            stopping = true;
+            void stop(0);
+          });
+        }
         return;
       }
       const child = spawn(command, args, {
@@ -200,7 +210,14 @@ program
   .option("--param <key=json>", "override a request setting, e.g. max_tokens=8000 (repeatable)", parseParam, {})
   .option("-c, --config <path>", `replay settings (default: ./${CONFIG_FILE_NAME})`)
   .option("-j, --concurrency <n>", "replays to run at once", positiveInt, 2)
+  .option("--include-incomplete", "with --all or --label, also replay traces that did not finish when recorded")
+  .option("--fail-on-change", "exit with code 1 when any run changed (for CI)")
   .option("--json", "print the run summary and diffs as JSON")
+  .addHelpText(
+    "after",
+    `
+Exit codes: 0 done, 1 a run changed (only with --fail-on-change) or bad input, 2 a replay failed with an error.`,
+  )
   .action(
     async (
       refs: string[],
@@ -214,6 +231,8 @@ program
         param: Record<string, unknown>;
         config?: string;
         concurrency: number;
+        includeIncomplete?: boolean;
+        failOnChange?: boolean;
         json?: boolean;
       },
     ) => {
@@ -232,6 +251,15 @@ program
           : fail("name traces to replay, or pass --all");
       if (o.label) baselines = baselines.filter((t) => t.label === o.label);
       baselines = baselines.filter((t) => t.source !== "replay");
+      if (!refs.length && !o.includeIncomplete) {
+        const skipped = baselines.filter((t) => t.status !== "complete").length;
+        if (skipped) {
+          process.stderr.write(
+            `[${CLI_NAME}] skipped ${skipped} traces that did not finish when recorded (--include-incomplete to replay them)\n`,
+          );
+        }
+        baselines = baselines.filter((t) => t.status === "complete");
+      }
       if (!baselines.length) fail("no traces to replay");
 
       const changes: Changes = {};
@@ -281,6 +309,11 @@ program
         console.log(formatSummary(result.summary, `Run ${result.id}`));
         console.log(`  saved to ${result.dir}`);
       }
+      if (result.aborted) {
+        process.stderr.write(`${CLI_NAME}: stopped early: ${result.aborted}\n`);
+        process.exitCode = 2;
+      } else if (result.summary.verdicts.error) process.exitCode = 2;
+      else if (o.failOnChange && result.summary.verdicts.changed) process.exitCode = 1;
     },
   );
 

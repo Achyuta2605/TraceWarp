@@ -38,13 +38,17 @@ export interface TokenUsage {
 
 export function priceFor(model: string): Price | undefined {
   if (PRICES[model]) return PRICES[model];
-  // Dated or suffixed ids such as "claude-opus-5-5[1m]" or "anthropic.claude-opus-5-5".
-  const bare = model.replace(/^anthropic\./, "").replace(/\[.*\]$/, "");
+  // Suffixed and cloud ids: "claude-opus-5-5[1m]", "us.anthropic.claude-haiku-4-5-20251001-v1:0" (Bedrock),
+  // "claude-haiku-4-5@20251001" (Vertex).
+  const bare = model
+    .replace(/^([a-z]{2,6}\.)?anthropic\./, "")
+    .replace(/\[.*\]$/, "")
+    .replace(/-v\d+(:\d+)?$/, "")
+    .replace(/@(\d{8})$/, "-$1");
   if (PRICES[bare]) return PRICES[bare];
-  const prefix = Object.keys(PRICES)
-    .filter((k) => bare.startsWith(`${k}-`))
-    .sort((a, b) => b.length - a.length)[0];
-  return prefix ? PRICES[prefix] : undefined;
+  // Only a date suffix (claude-haiku-4-5-20251001) maps to the base id; "claude-opus-5-9" is not opus-5.
+  const dated = /^(.*)-\d{8}$/.exec(bare);
+  return dated ? PRICES[dated[1] as string] : undefined;
 }
 
 /** Estimated cost in USD, or null when the model is not in the price table. */

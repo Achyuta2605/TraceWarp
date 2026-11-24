@@ -30,6 +30,17 @@ export function parseSse(text: string): SseEvent[] {
 
 export class StreamError extends Error {}
 
+/** Tool input from streamed JSON. Input cut off mid-way is kept as {} and the raw text saved for inspection. */
+function parseInput(block: Record<string, unknown>, json: string): unknown {
+  if (!json.trim()) return {};
+  try {
+    return JSON.parse(json);
+  } catch {
+    block.truncated_input = json;
+    return {};
+  }
+}
+
 type Block = Record<string, unknown> & { type: string };
 
 /** Throws StreamError when the stream carried an `error` event or never started a message. */
@@ -84,16 +95,24 @@ export function messageFromSse(text: string): Anthropic.Message {
       const block = message.content[index];
       const json = partialJson.get(index);
       if (block && json !== undefined) {
-        block.input = json.trim() ? JSON.parse(json) : {};
+        block.input = parseInput(block, json);
         partialJson.delete(index);
       }
     } else if (type === "message_delta") {
       const delta = data.delta as Record<string, unknown>;
       for (const [k, v] of Object.entries(delta)) message[k] = v;
-      if (data.usage) Object.assign(message.usage, data.usage);
+      // message_delta can carry nulls for counts it does not repeat; keep the values from message_start.
+      for (const [k, v] of Object.entries((data.usage as Record<string, unknown>) ?? {})) {
+        if (v !== null && v !== undefined) message.usage[k] = v;
+      }
     }
   }
   if (!message) throw new StreamError("stream ended before a message started");
+  // A stream cut at max_tokens can leave a tool call open with half its arguments.
+  for (const [index, json] of partialJson) {
+    const block = message.content[index];
+    if (block) block.input = parseInput(block, json);
+  }
   message.content = message.content.filter(Boolean);
   return message as unknown as Anthropic.Message;
 }

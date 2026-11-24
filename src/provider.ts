@@ -1,10 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { API_KEY_ENV_VAR, DEFAULT_UPSTREAM, UPSTREAM_ENV_VAR } from "./brand.js";
+import { API_KEY_ENV_VAR } from "./brand.js";
+import { defaultUpstream, LOOP_HEADER } from "./capture.js";
 import type { Message } from "./trace.js";
 
 /** Something that answers Messages API requests. Replays use the real API; tests use a script. */
 export interface Provider {
-  create(body: Record<string, unknown>): Promise<Message>;
+  /** `headers` are the recorded request headers a replay resends, such as anthropic-beta. */
+  create(body: Record<string, unknown>, headers?: Record<string, string>): Promise<Message>;
 }
 
 export function apiKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string | undefined {
@@ -25,16 +27,22 @@ export class AnthropicProvider implements Provider {
     if (!apiKey) throw new MissingApiKeyError();
     this.client = new Anthropic({
       apiKey,
-      // Explicit, so a proxy URL left in ANTHROPIC_BASE_URL (for example TraceWarp's own) is never used by accident.
-      baseURL: opts.baseURL ?? process.env[UPSTREAM_ENV_VAR] ?? DEFAULT_UPSTREAM,
+      // Same choice as the recording proxy, so a replay talks to the same API the recording did.
+      baseURL: opts.baseURL ?? defaultUpstream(),
       maxRetries: opts.maxRetries ?? 4,
+      // A recording proxy refuses calls carrying this, so replays are never recorded as new baselines.
+      defaultHeaders: { [LOOP_HEADER]: "replay" },
     });
   }
 
-  async create(body: Record<string, unknown>): Promise<Message> {
+  async create(body: Record<string, unknown>, headers: Record<string, string> = {}): Promise<Message> {
     const { stream: _stream, ...params } = body;
+    // anthropic-version is the SDK's own; only beta flags are carried over.
+    const beta = headers["anthropic-beta"];
     // Streaming keeps long agent turns clear of HTTP timeouts.
-    return this.client.messages.stream(params as unknown as Anthropic.MessageStreamParams).finalMessage();
+    return this.client.messages
+      .stream(params as unknown as Anthropic.MessageStreamParams, beta ? { headers: { "anthropic-beta": beta } } : {})
+      .finalMessage();
   }
 }
 
@@ -44,14 +52,16 @@ export class AnthropicProvider implements Provider {
  */
 export class ScriptedProvider implements Provider {
   readonly requests: Record<string, unknown>[] = [];
+  readonly headers: Array<Record<string, string> | undefined> = [];
   private i = 0;
 
   constructor(
     private readonly script: Array<Partial<Message> | ((body: Record<string, unknown>) => Partial<Message>)>,
   ) {}
 
-  async create(body: Record<string, unknown>): Promise<Message> {
+  async create(body: Record<string, unknown>, headers?: Record<string, string>): Promise<Message> {
     this.requests.push(structuredClone(body));
+    this.headers.push(headers);
     const next = this.script[this.i++];
     if (!next) throw new Error("ScriptedProvider: script exhausted");
     const reply = typeof next === "function" ? next(body) : next;

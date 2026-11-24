@@ -213,6 +213,9 @@ export interface RunSummary {
   argumentsDrifted: number;
   /** Share of comparable runs whose final answer changed in substance (see answerChanged). */
   answerChanged: number;
+  /** Runs that ended in error or unreplayable, left out of the shares, cost and time. */
+  excluded: number;
+  /** Cost and time of the comparable runs only, so a replay cut short does not look cheap. */
   costUsd: { baseline: number | null; candidate: number | null };
   latencyMs: { baseline: number; candidate: number };
   replayTiers: Partial<Record<ReplayTier, number>>;
@@ -237,11 +240,11 @@ export function summarize(diffs: TraceDiff[]): RunSummary {
       if (!names) path++;
       else if (!d.tools.sameSequence) args++;
       if (d.final.changed) answer++;
+      cb = cb === null || d.costUsd.baseline === null ? null : cb + d.costUsd.baseline;
+      cc = cc === null || d.costUsd.candidate === null ? null : cc + d.costUsd.candidate;
+      lb += d.latencyMs.baseline;
+      lc += d.latencyMs.candidate;
     }
-    cb = cb === null || d.costUsd.baseline === null ? null : cb + d.costUsd.baseline;
-    cc = cc === null || d.costUsd.candidate === null ? null : cc + d.costUsd.candidate;
-    lb += d.latencyMs.baseline;
-    lc += d.latencyMs.candidate;
     for (const [t, n] of Object.entries(d.replayTiers)) tiers[t as ReplayTier] = (tiers[t as ReplayTier] ?? 0) + n;
   }
   const share = (n: number) => (comparable ? round(n / comparable) : 0);
@@ -251,6 +254,7 @@ export function summarize(diffs: TraceDiff[]): RunSummary {
     toolPathChanged: share(path),
     argumentsDrifted: share(args),
     answerChanged: share(answer),
+    excluded: diffs.length - comparable,
     costUsd: { baseline: cb, candidate: cc },
     latencyMs: { baseline: lb, candidate: lc },
     replayTiers: tiers,

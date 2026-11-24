@@ -53,22 +53,31 @@ export class Resolver {
     const exact = this.pick(candidates.filter((c) => canonical(c.step.input) === key));
     if (exact) return this.answer(exact, { tier: "exact" });
 
+    // A read-only live tool gives the true answer, which beats a recorded result for a merely similar call.
+    const tool = toolConfig(this.opts.config, call.name);
+    let liveError: string | undefined;
+    if (tool.live && tool.readOnly && this.opts.live) {
+      try {
+        const r = await this.opts.live.call(tool.live, tool.mcpName ?? mcpToolName(call.name), call.input);
+        return { content: r.content, isError: r.isError, replay: { tier: "live" } };
+      } catch (e) {
+        // A server that is down should not make a call unreplayable when the recording can still answer it.
+        liveError = `live call failed: ${(e as Error).message}`;
+      }
+    }
+
     const threshold = this.opts.config.replay.fuzzyThreshold;
     const scored = candidates
       .map((c) => ({ ...c, similarity: inputSimilarity(c.step.input, call.input) }))
       .filter((c) => c.similarity >= threshold)
       .sort((a, b) => b.similarity - a.similarity);
     const fuzzy = this.pick(scored);
-    if (fuzzy) return this.answer(fuzzy, { tier: "fuzzy", similarity: round(fuzzy.similarity) });
-
-    const tool = toolConfig(this.opts.config, call.name);
-    if (tool.live && tool.readOnly && this.opts.live) {
-      try {
-        const r = await this.opts.live.call(tool.live, tool.mcpName ?? mcpToolName(call.name), call.input);
-        return { content: r.content, isError: r.isError, replay: { tier: "live" } };
-      } catch (e) {
-        return this.miss(`live call failed: ${(e as Error).message}`);
-      }
+    if (fuzzy) {
+      return this.answer(fuzzy, {
+        tier: "fuzzy",
+        similarity: round(fuzzy.similarity),
+        ...(liveError ? { note: liveError } : {}),
+      });
     }
 
     if (this.opts.config.replay.simulate && !tool.noSimulate && this.opts.simulator) {
@@ -79,7 +88,10 @@ export class Resolver {
       }
     }
     return this.miss(
-      candidates.length ? "recorded calls to this tool had different arguments" : "tool never called in the recording",
+      liveError ??
+        (candidates.length
+          ? "recorded calls to this tool had different arguments"
+          : "tool never called in the recording"),
     );
   }
 
