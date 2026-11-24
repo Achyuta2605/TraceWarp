@@ -426,3 +426,18 @@ describe("review fixes", () => {
     expect(String(d.firstDivergence?.baseline)).toContain("a.md");
   });
 });
+
+describe("symlinked roots", () => {
+  it("keeps a path that is inside the root when the root is reached through a symlink (macOS /var)", async () => {
+    symlinkSync(tmp.dir, join(tmp.dir, "..", `${tmp.dir.split("/").pop()}-link`));
+    const link = `${tmp.dir}-link`;
+    try {
+      const t = new ClaudeCodeTools(join(link, "repo", "docs"), join(link, "repo"));
+      expect((await t.call("Read", { file_path: join(link, "repo", "docs", "a.md"), limit: 1 })).content).toBe(
+        "1\t# Alpha\n",
+      );
+    } finally {
+      (await import("node:fs")).rmSync(link);
+    }
+  });
+});

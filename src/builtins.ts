@@ -29,6 +29,8 @@ export interface BuiltinResult {
 
 export class ClaudeCodeTools {
   private readonly root: string;
+  /** The root as given, before symlinks are resolved (on macOS /var is /private/var). */
+  private readonly givenRoot: string;
 
   /**
    * @param root folder the tools may read
@@ -38,7 +40,8 @@ export class ClaudeCodeTools {
     root: string,
     private readonly recordedCwd?: string,
   ) {
-    this.root = realpathSync(resolve(root));
+    this.givenRoot = resolve(root);
+    this.root = realpathSync(this.givenRoot);
   }
 
   handles(name: string): boolean {
@@ -74,7 +77,8 @@ export class ClaudeCodeTools {
     let raw = typeof p === "string" && p.length ? p : fallback;
     // A recorded absolute path is kept when it is already inside the root, and moved there when it is under the
     // folder the session was recorded in (a replay on another checkout).
-    if (this.recordedCwd && isAbsolute(raw) && !within(this.root, raw) && within(this.recordedCwd, raw)) {
+    const inRoot = within(this.root, raw) || within(this.givenRoot, raw);
+    if (this.recordedCwd && isAbsolute(raw) && !inRoot && within(this.recordedCwd, raw)) {
       raw = join(this.root, relative(this.recordedCwd, raw));
     }
     const full = resolve(this.root, raw);
