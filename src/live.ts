@@ -30,18 +30,25 @@ export class LiveTools {
       // The SDK's safe default set (PATH, HOME, ...) plus what the config names; not every secret in our env.
       env: { ...getDefaultEnvironment(), ...cfg.env },
       ...(cfg.cwd ? { cwd: cfg.cwd } : {}),
-      stderr: "ignore",
+      stderr: "pipe",
+    });
+    // Keep the end of the server's stderr: when it exits at start-up, that says why (a bad root, a missing package).
+    let stderr = "";
+    transport.stderr?.on("data", (d: Buffer) => {
+      stderr = (stderr + d.toString()).slice(-600);
     });
     const client = new Client({ name: "tracewarp-live", version: "1" });
     const p = client
       .connect(transport)
       .then(() => client)
       .catch((e: Error) => {
+        const launcher = command === "npx" || command === "uvx";
         const hint =
-          cfg.preset && /ENOENT/.test(e.message)
-            ? ` (the ${cfg.preset} preset needs ${PRESETS[cfg.preset].install})`
+          cfg.preset && launcher && /ENOENT/.test(e.message)
+            ? ` (the ${cfg.preset} preset needs ${PRESETS[cfg.preset].install}, or set command)`
             : "";
-        throw new Error(`could not start server "${name}": ${e.message}${hint}`);
+        const said = stderr.trim() ? `; the server said: ${stderr.trim().split("\n").slice(-3).join(" | ")}` : "";
+        throw new Error(`could not start server "${name}": ${e.message}${hint}${said}`);
       });
     this.clients.set(name, p);
     return p;

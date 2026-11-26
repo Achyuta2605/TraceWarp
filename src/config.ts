@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import { CONFIG_FILE_NAME } from "./brand.js";
-import { PRESET_NAMES, PRESETS, presetTools } from "./presets.js";
+import { PRESET_NAMES, PRESETS, type PresetName, presetTools } from "./presets.js";
 
 /**
  * tracewarp.yaml: how replays answer tool calls that were never recorded.
@@ -56,11 +57,14 @@ const serverSchema = z
     if (!p.usesRoot && s.root) {
       ctx.addIssue({ code: "custom", path: ["root"], message: `the ${s.preset} preset takes no root` });
     }
+    if (s.openWorld && !p.openWorldTools?.length) {
+      ctx.addIssue({ code: "custom", path: ["openWorld"], message: `the ${s.preset} preset has no internet tools` });
+    }
   });
 
 const toolSchema = z.strictObject({
-  /** Calling the real tool cannot change anything. Required for live calls. */
-  readOnly: z.boolean().default(false),
+  /** Calling the real tool cannot change anything. Required for live calls. Unset means false. */
+  readOnly: z.boolean().optional(),
   /** Server (from `servers`) to call for live answers. */
   live: z.string().optional(),
   /** The tool's name on that MCP server, when it differs from the name the model uses. */
@@ -132,22 +136,62 @@ type RawConfig = {
   tools: Record<string, z.infer<typeof toolSchema>>;
 };
 
+/** `~/x` means the home folder, as in a shell; anything else is resolved against the current folder. */
+function resolveRoot(root: string): string {
+  return root === "~" || root.startsWith("~/") ? join(homedir(), root.slice(1)) : resolve(root);
+}
+
 /**
- * Turns each preset server into a command and live entries for its read-only tools. A tool the config already
- * names keeps the config's settings, so a preset tool can still be denied or switched off. Roots are resolved
- * against the current folder, as `cwd` is.
+ * Turns each preset server into a command and live entries for its read-only tools, and records which tool names
+ * came from a preset (`presetTools`), so `--deny-tool` may override them. A tool the config also names keeps every
+ * field the config wrote, on top of the preset's: `{ noSimulate: true }` stays live, `{ deny: true }` or
+ * `{ readOnly: false }` switches it off. Roots are resolved against the current folder, as `cwd` is.
  */
-function expandPresets<C extends RawConfig>(c: C): C {
+function expandPresets<C extends RawConfig>(c: C, ctx: z.RefinementCtx): C & { presetTools: string[] } {
+  const owner = new Map<string, string>();
   for (const [name, s] of Object.entries(c.servers)) {
     if (!s.preset) continue;
-    const root = s.root ? resolve(s.root) : "";
-    if (s.root) s.root = root;
-    s.command ??= PRESETS[s.preset].command(root);
-    for (const t of presetTools(name, { ...s, preset: s.preset })) {
-      c.tools[t.name] ??= { readOnly: true, live: name, mcpName: t.mcpName, noSimulate: false, deny: false };
+    const preset: PresetName = s.preset;
+    if (s.root) s.root = resolveRoot(s.root);
+    s.command ??= PRESETS[preset].command(s.root ?? "");
+    const prefix = s.toolPrefix ?? `mcp__${name}__`;
+    for (const w of PRESETS[preset].writeTools) {
+      if (c.tools[prefix + w]?.live === name) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tools", prefix + w, "live"],
+          message: `${w} changes things, so it can never be live on the ${preset} preset`,
+        });
+      }
+    }
+    for (const t of presetTools(name, { ...s, preset })) {
+      const other = owner.get(t.name);
+      if (other) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["servers", name, "toolPrefix"],
+          message: `${t.name} would belong to both "${other}" and "${name}": give them different toolPrefix values`,
+        });
+        continue;
+      }
+      owner.set(t.name, name);
+      const own = c.tools[t.name];
+      const off = own?.deny === true || own?.readOnly === false;
+      c.tools[t.name] = {
+        noSimulate: false,
+        deny: false,
+        ...own,
+        readOnly: off ? (own?.readOnly ?? false) : true,
+        ...(off ? {} : { live: own?.live ?? name, mcpName: own?.mcpName ?? t.mcpName }),
+      };
     }
   }
-  return c;
+  // A hand-written tool on a server with its own toolPrefix: the server's name for it drops that prefix.
+  for (const [toolName, t] of Object.entries(c.tools)) {
+    const prefix = t.live ? c.servers[t.live]?.toolPrefix : undefined;
+    if (prefix !== undefined && !t.mcpName && toolName.startsWith(prefix)) t.mcpName = toolName.slice(prefix.length);
+  }
+  return Object.assign(c, { presetTools: [...owner.keys()] });
 }
 
 export type Config = z.infer<typeof configSchema>;
@@ -185,6 +229,17 @@ export function loadConfig(path?: string): Config {
   return parseConfig(readFileSync(file, "utf8"), file);
 }
 
+/**
+ * Makes every unrecorded call to a tool get a permission error (`--deny-tool`). A tool a preset made live may be
+ * denied; one the user made live by hand is a conflict worth pointing out.
+ */
+export function denyTool(config: Config, name: string): void {
+  const t = config.tools[name];
+  if (t?.live && !config.presetTools.includes(name)) throw new ConfigError("the config makes this tool live");
+  const { live: _live, mcpName: _mcpName, ...rest } = t ?? { noSimulate: false };
+  config.tools[name] = { ...rest, readOnly: false, deny: true };
+}
+
 export function toolConfig(config: Config, name: string): ToolConfig {
-  return config.tools[name] ?? { readOnly: false, noSimulate: false, deny: false };
+  return config.tools[name] ?? { noSimulate: false, deny: false };
 }

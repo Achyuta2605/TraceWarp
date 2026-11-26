@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ConfigError, parseConfig } from "../src/config.js";
+import { ConfigError, denyTool, parseConfig } from "../src/config.js";
 import { replay } from "../src/engine.js";
 import { LiveTools } from "../src/live.js";
 import { PRESET_VERSIONS, PRESETS } from "../src/presets.js";
@@ -19,7 +21,7 @@ describe("server presets in tracewarp.yaml", () => {
   it("starts the pinned filesystem server in the root and makes only its read tools live", () => {
     const c = parseConfig("servers:\n  fs: { preset: filesystem, root: ./docs }\n");
     const root = resolve("docs");
-    expect(c.servers.fs?.command).toEqual(["npx", "-y", PRESET_VERSIONS.filesystem, root]);
+    expect(c.servers.fs?.command).toEqual(["npx", "-y", PRESET_VERSIONS.filesystem, "--read-only", "--", root]);
     expect(c.servers.fs?.root).toBe(root);
     expect(c.tools.mcp__fs__read_text_file).toEqual({
       readOnly: true,
@@ -28,6 +30,7 @@ describe("server presets in tracewarp.yaml", () => {
       noSimulate: false,
       deny: false,
     });
+    expect(c.presetTools).toContain("mcp__fs__read_text_file");
     for (const write of ["write_file", "edit_file", "move_file", "create_directory", "append_file", "copy_file"]) {
       expect(c.tools[`mcp__fs__${write}`]).toBeUndefined();
     }
@@ -55,20 +58,50 @@ describe("server presets in tracewarp.yaml", () => {
     expect(c.tools.mcp__fs__read_text_file).toBeUndefined();
   });
 
-  it("lets the config override a preset's command and its tools", () => {
+  it("lets the config override a preset's command, and merges its own tool settings over the preset's", () => {
     const c = parseConfig(
       [
         "servers:",
         "  fs: { preset: filesystem, root: ., command: [mcp-server-filesystem, .] }",
         "tools:",
         "  mcp__fs__read_media_file: { deny: true }",
-        "  mcp__fs__directory_tree: { readOnly: true }",
+        "  mcp__fs__directory_tree: { readOnly: false }",
+        "  mcp__fs__read_file: { noSimulate: true }",
       ].join("\n"),
     );
     expect(c.servers.fs?.command).toEqual(["mcp-server-filesystem", "."]);
     expect(c.tools.mcp__fs__read_media_file).toMatchObject({ deny: true, readOnly: false });
+    expect(c.tools.mcp__fs__read_media_file?.live).toBeUndefined();
     expect(c.tools.mcp__fs__directory_tree?.live).toBeUndefined();
-    expect(c.tools.mcp__fs__read_file?.live).toBe("fs");
+    expect(c.tools.mcp__fs__read_file).toMatchObject({ noSimulate: true, readOnly: true, live: "fs" });
+    expect(c.tools.mcp__fs__get_file_info?.live).toBe("fs");
+  });
+
+  it("refuses to make a preset's write tool live, even when the config calls it read-only", () => {
+    expectProblem(
+      "servers:\n  fs: { preset: filesystem, root: . }\ntools:\n  mcp__fs__write_file: { readOnly: true, live: fs }\n",
+      "write_file changes things, so it can never be live",
+    );
+    expectProblem(
+      "servers:\n  git: { preset: git, root: . }\ntools:\n  mcp__git__git_commit: { readOnly: true, live: git }\n",
+      "git_commit changes things",
+    );
+  });
+
+  it("refuses two presets whose tools would share names", () => {
+    expectProblem(
+      'servers:\n  a: { preset: filesystem, root: ., toolPrefix: "" }\n  b: { preset: filesystem, root: ., toolPrefix: "" }\n',
+      'read_file would belong to both "a" and "b"',
+    );
+  });
+
+  it("expands ~ in a root and maps a hand-written tool through a custom prefix", () => {
+    const c = parseConfig(
+      'servers:\n  fs: { preset: filesystem, root: ~/docs, toolPrefix: "fs_" }\ntools:\n  fs_extra: { readOnly: true, live: fs }\n',
+    );
+    expect(c.servers.fs?.root).toBe(join(homedir(), "docs"));
+    expect(c.tools.fs_extra?.mcpName).toBe("extra");
+    expect(c.tools.fs_read_file?.mcpName).toBe("read_file");
   });
 
   it("explains a preset that is missing its root, or settings that need a preset", () => {
@@ -78,6 +111,18 @@ describe("server presets in tracewarp.yaml", () => {
     expectProblem("servers:\n  x: { env: { A: b } }\n", "servers.x.command: give a command or a preset");
     expectProblem("servers:\n  x: { command: [a], root: . }\n", "root needs a preset");
     expectProblem("servers:\n  x: { command: [a], openWorld: true }\n", "openWorld needs a preset");
+    expectProblem("servers:\n  fs: { preset: filesystem, root: ., openWorld: true }\n", "has no internet tools");
+  });
+
+  it("lets --deny-tool deny a preset tool, but not a tool the user made live by hand", () => {
+    const c = parseConfig(
+      "servers:\n  fs: { preset: filesystem, root: . }\n  docs: { command: [x] }\ntools:\n  search: { readOnly: true, live: docs }\n",
+    );
+    denyTool(c, "mcp__fs__read_media_file");
+    expect(c.tools.mcp__fs__read_media_file).toEqual({ readOnly: false, deny: true, noSimulate: false });
+    expect(() => denyTool(c, "search")).toThrow("the config makes this tool live");
+    denyTool(c, "Bash");
+    expect(c.tools.Bash).toMatchObject({ deny: true, readOnly: false });
   });
 
   it("still requires a live tool's server to exist", () => {
@@ -98,11 +143,14 @@ describe("the filesystem preset against the real server", () => {
   });
   afterEach(() => tmp.cleanup());
 
+  const q = JSON.stringify;
   const config = () =>
-    parseConfig(`servers:\n  fs: { preset: filesystem, root: ${docs}, command: [${FS_BIN}, ${docs}] }\n`);
+    parseConfig(
+      `servers:\n  fs: { preset: filesystem, root: ${q(docs)}, command: [${q(FS_BIN)}, --read-only, --, ${q(docs)}] }\n`,
+    );
 
   it.runIf(existsSync(FS_BIN))(
-    "answers a new read for real, refuses paths outside the root, and never runs a write",
+    "answers a new read for real, keeps paths outside the root away from the model, and never runs a write",
     async () => {
       const base = recordedTrace({
         task: "What is R-500?",
@@ -126,11 +174,11 @@ describe("the filesystem preset against the real server", () => {
         const [read, outside, link, write] = cand.steps;
         expect(read?.replay).toEqual({ tier: "live" });
         expect(JSON.stringify(read?.result)).toContain("Do NOT retry");
-        expect(outside?.replay?.tier).toBe("live");
-        expect(outside?.isError).toBe(true);
-        expect(JSON.stringify(outside?.result)).toContain("outside allowed directories");
-        expect(link?.isError).toBe(true);
-        expect(JSON.stringify(link?.result)).not.toContain("outside the root\\n");
+        // The server refuses both; TraceWarp treats that as a replay-setup miss, not an answer for the model.
+        expect(outside?.replay?.tier).toBe("unreplayable");
+        expect(outside?.replay?.note).toContain("refused a path outside its root");
+        expect(link?.replay?.tier).toBe("unreplayable");
+        expect(JSON.stringify(link?.result)).not.toContain("outside the root");
         expect(write?.replay?.tier).toBe("unreplayable");
         expect(existsSync(join(docs, "new.md"))).toBe(false);
       } finally {
@@ -140,15 +188,60 @@ describe("the filesystem preset against the real server", () => {
     30_000,
   );
 
-  it("says what to install when a preset server cannot start", async () => {
+  it("passes on why a server would not start", async () => {
+    const c = parseConfig(
+      `servers:\n  fs: { preset: filesystem, root: ., command: [${q(FS_BIN)}, ${q(join(tmp.dir, "nope"))}] }\n`,
+    );
+    const live = new LiveTools(c.servers);
+    try {
+      await expect(live.call("fs", "list_allowed_directories", {})).rejects.toThrow(/the server said: .+/);
+    } finally {
+      await live.close();
+    }
+  }, 20_000);
+
+  it("says what to install only when the preset's own launcher is missing", async () => {
     const c = parseConfig("servers:\n  git: { preset: git, root: ., command: [tracewarp-no-such-uvx, x] }\n");
     const live = new LiveTools(c.servers);
     try {
-      await expect(live.call("git", "git_status", {})).rejects.toThrow(
-        /could not start server "git": .*ENOENT.*the git preset needs uv/,
-      );
+      await expect(live.call("git", "git_status", {})).rejects.not.toThrow("needs uv");
+      await expect(live.call("git", "git_status", {})).rejects.toThrow(/could not start server "git": .*ENOENT/);
     } finally {
       await live.close();
     }
   });
+});
+
+// Opt-in: needs mcp-server-git installed (TRACEWARP_TEST_GIT_SERVER=/path/to/mcp-server-git).
+const GIT_BIN = process.env.TRACEWARP_TEST_GIT_SERVER;
+describe.runIf(GIT_BIN)("the git preset against the real server", () => {
+  it("answers git_log live and keeps other repositories and --output= away", async () => {
+    const tmp = tempDir();
+    const repo = join(tmp.dir, "repo");
+    mkdirSync(repo);
+    const sh = (args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+    sh(["init", "-q"]);
+    writeFileSync(join(repo, "a.md"), "retries: 3\n");
+    sh(["add", "a.md"]);
+    sh(["-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-qm", "Cut retries to 3"]);
+    const q = JSON.stringify;
+    const c = parseConfig(
+      `servers:\n  git: { preset: git, root: ${q(repo)}, command: [${q(GIT_BIN)}, --repository, ${q(repo)}] }\n`,
+    );
+    const live = new LiveTools(c.servers);
+    try {
+      const log = await live.call("git", "git_log", { repo_path: repo, max_count: 5 });
+      expect(log.isError).toBe(false);
+      expect(JSON.stringify(log.content)).toContain("Cut retries to 3");
+      const other = await live.call("git", "git_status", { repo_path: tmp.dir });
+      expect(other.isError).toBe(true);
+      const out = join(tmp.dir, "pwn");
+      const inj = await live.call("git", "git_diff", { repo_path: repo, target: `--output=${out}` });
+      expect(inj.isError).toBe(true);
+      expect(existsSync(out)).toBe(false);
+    } finally {
+      await live.close();
+      tmp.cleanup();
+    }
+  }, 30_000);
 });

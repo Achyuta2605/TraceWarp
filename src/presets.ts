@@ -20,6 +20,8 @@ interface Preset {
   command(root: string): string[];
   /** Tools that only read, and stay inside `root`. */
   readTools: string[];
+  /** Tools that change things. They are never live, even if the config marks them read-only. */
+  writeTools: string[];
   /** Tools that only read but reach outside the machine (the web), so they go live only with openWorld: true. */
   openWorldTools?: string[];
   /** Whether the preset needs a root folder at all. */
@@ -29,19 +31,23 @@ interface Preset {
 }
 
 /**
+ * Only the top-level package is pinned: npx and uvx fetch it, and its unlocked dependencies, from the registry when
+ * a replay first needs the server. For CI, install the server yourself and set `command`.
+ *
  * Versions checked on Nov 26, 2026: path escapes (`..`, absolute paths, symlinks) are refused by the filesystem
  * server, and the git server refuses repositories outside --repository and arguments starting with "-" (older
  * releases let `--output=` through git_diff and git_show, which writes files).
  */
 export const PRESET_VERSIONS = {
   filesystem: "@modelcontextprotocol/server-filesystem@2.4.0",
-  git: "mcp-server-git==2026.11.18",
-  fetch: "mcp-server-fetch==2026.11.18",
+  git: "mcp-server-git@2026.11.18",
+  fetch: "mcp-server-fetch@2026.11.18",
 } as const;
 
 export const PRESETS: Record<PresetName, Preset> = {
   filesystem: {
-    command: (root) => ["npx", "-y", PRESET_VERSIONS.filesystem, root],
+    // --read-only makes the server leave its write tools out entirely, a second guard beside the tool list.
+    command: (root) => ["npx", "-y", PRESET_VERSIONS.filesystem, "--read-only", "--", root],
     readTools: [
       "read_file",
       "read_text_file",
@@ -54,6 +60,7 @@ export const PRESETS: Record<PresetName, Preset> = {
       "get_file_info",
       "list_allowed_directories",
     ],
+    writeTools: ["write_file", "append_file", "edit_file", "create_directory", "move_file", "copy_file"],
     usesRoot: true,
     install: "Node.js with npx",
   },
@@ -69,12 +76,14 @@ export const PRESETS: Record<PresetName, Preset> = {
       "git_branch",
       "git_remote",
     ],
+    writeTools: ["git_commit", "git_add", "git_reset", "git_create_branch", "git_checkout", "git_merge"],
     usesRoot: true,
     install: "uv (https://docs.astral.sh/uv/)",
   },
   fetch: {
     command: () => ["uvx", PRESET_VERSIONS.fetch],
     readTools: [],
+    writeTools: [],
     openWorldTools: ["fetch"],
     usesRoot: false,
     install: "uv (https://docs.astral.sh/uv/)",
@@ -96,3 +105,6 @@ export function presetTools(serverName: string, s: PresetServer): { name: string
   const names = [...p.readTools, ...(s.openWorld ? (p.openWorldTools ?? []) : [])];
   return names.map((t) => ({ name: `${prefix}${t}`, mcpName: t }));
 }
+
+/** A preset server answers a call with this when the path or repository is outside its root. */
+export const OUTSIDE_ROOT = /outside (the )?allowed (directories|repository)|symlink target outside/i;

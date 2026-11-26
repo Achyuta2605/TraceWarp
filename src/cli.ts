@@ -6,7 +6,7 @@ import { Command, InvalidArgumentError } from "commander";
 import spawn from "cross-spawn";
 import { CLI_NAME, CONFIG_FILE_NAME, DEFAULT_UPSTREAM, PRODUCT_NAME, UPSTREAM_ENV_VAR } from "./brand.js";
 import { startRecordingProxy } from "./capture.js";
-import { ConfigError, loadConfig } from "./config.js";
+import { ConfigError, denyTool, loadConfig } from "./config.js";
 import { diffTraces, summarize, type TraceDiff } from "./diff.js";
 import type { Changes } from "./engine.js";
 import { formatDiff, formatSummary, formatTrace, formatTraceList } from "./format.js";
@@ -327,15 +327,20 @@ replays); 2 a replay failed with an error, or every judge call failed; 3 bad inp
       }
       if (!baselines.length) fail("no traces to replay");
       for (const name of o.denyTool) {
-        const t = config.tools[name];
-        if (t?.live) fail(`--deny-tool ${name}: the config makes this tool live`);
-        config.tools[name] = { ...(t ?? { readOnly: false, noSimulate: false }), readOnly: false, deny: true };
+        try {
+          denyTool(config, name);
+        } catch (e) {
+          fail(`--deny-tool ${name}: ${(e as Error).message}`);
+        }
       }
       if (o.claudeCodeTools) {
         config.builtins.claudeCode = {
           enabled: true,
           ...(typeof o.claudeCodeTools === "string" ? { root: o.claudeCodeTools } : {}),
         };
+      }
+      for (const [name, server] of Object.entries(config.servers)) {
+        if (server.root && !existsSync(server.root)) fail(`servers.${name}.root not found: ${server.root}`);
       }
       if (config.builtins.claudeCode.root && !existsSync(config.builtins.claudeCode.root)) {
         fail(`--claude-code-tools folder not found: ${config.builtins.claudeCode.root}`);

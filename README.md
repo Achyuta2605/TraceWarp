@@ -145,21 +145,28 @@ Three common MCP servers have presets, so you don't list their tools by hand:
 
 | Preset | Starts | Live tools | Never run |
 | --- | --- | --- | --- |
-| `filesystem` | `@modelcontextprotocol/server-filesystem@2.4.0`, confined to `root` | read, list, tree, search, file info | write, edit, move, copy, mkdir, append |
-| `git` | `mcp-server-git==2026.11.18 --repository <root>` | status, diff, log, show, branch, remote | commit, add, reset, branch, checkout, merge |
-| `fetch` | `mcp-server-fetch==2026.11.18` | none, unless `openWorld: true` | |
+| `filesystem` | `@modelcontextprotocol/server-filesystem@2.4.0 --read-only`, confined to `root` | read, list, tree, search, file info | write, edit, move, copy, mkdir, append |
+| `git` | `mcp-server-git@2026.11.18 --repository <root>` | status, diff, log, show, list branches, remote | commit, add, reset, create branch, checkout, merge |
+| `fetch` | `mcp-server-fetch@2026.11.18` | none, unless `openWorld: true` | |
 
 - The server key is the name your agent gave the server, so `fs` answers `mcp__fs__read_text_file`. Set
   `toolPrefix: ""` for an agent that calls the tools by their bare names.
 - Each preset pins a version we checked against path escapes: `..`, absolute paths and symlinks out of the root
   are refused, and so are git repositories outside it and git arguments that start with `-` (older git server
-  releases let `--output=` write files). Write tools are left out, so an unrecorded write stays unreplayable.
+  releases let `--output=` write files). Write tools are left out, the filesystem server runs with `--read-only`,
+  and a config that marks a preset's write tool live is rejected, so an unrecorded write stays unreplayable.
 - `fetch` reaches the internet, and a replay would see today's page rather than the recorded one, so it answers
   from the recording unless you set `openWorld: true`.
-- Set `command` to run your own install of the server (no `npx` or `uvx` at replay time). Any tool listed under
-  `tools` keeps your settings, so you can deny or turn off one preset tool.
+- Only the top-level package is pinned. By default `npx` and `uvx` download it and its dependencies when a replay
+  first needs the server. In CI, install the server yourself and set `command`.
+- A tool you also list under `tools` keeps what you wrote on top of the preset: `{ deny: true }` or
+  `{ readOnly: false }` turns it off, and `--deny-tool` works on preset tools too.
+- `root` is resolved against the folder you run `tracewarp` in (`~` is your home folder), and must exist.
+- `git_remote` returns remote URLs. If yours carry tokens, deny it, since results land in run files.
 - A call the recording already has is answered from the recording. Only new calls see the folder or repository
-  as it is now, so replay against a checkout close to the recorded one.
+  as it is now, so replay against a checkout close to the recorded one, at the same absolute path. If a new call
+  points outside the root (a trace recorded at `/Users/you/repo`, replayed in CI at `/home/runner/repo`), the
+  server's refusal is not passed to the model; the call falls back to the recording, else it is unreplayable.
 
 A replay of Claude Code with the filesystem and git servers: without presets, 8 of 10 unchanged replays stopped
 on a call the recording never made; with them, none did. Details and the model-switch results:
@@ -288,7 +295,7 @@ prompts and tool results, so treat them like logs: keep them out of git unless t
 
 ```bash
 npm install
-npm test          # build + 118 tests, no network or API key needed
+npm test          # build + 123 tests (one more with the git server installed), no network or API key needed
 npm run lint && npm run typecheck
 ```
 

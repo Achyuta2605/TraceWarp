@@ -2,6 +2,7 @@ import type { ClaudeCodeTools } from "./builtins.js";
 import { type Config, toolConfig } from "./config.js";
 import { canonical, inputSimilarity } from "./json.js";
 import { type LiveTools, mcpToolName } from "./live.js";
+import { OUTSIDE_ROOT } from "./presets.js";
 import type { Provider } from "./provider.js";
 import type { ReplayInfo, ToolStep } from "./trace.js";
 
@@ -75,7 +76,14 @@ export class Resolver {
     if (tool.live && tool.readOnly && this.opts.live) {
       try {
         const r = await this.opts.live.call(tool.live, tool.mcpName ?? mcpToolName(call.name), call.input);
-        return { content: r.content, isError: r.isError, replay: { tier: "live" } };
+        // A preset server refusing a path outside its root usually means the trace was recorded in another folder
+        // (a laptop path replayed in CI). That refusal is about the replay setup, not the model, so it must not
+        // reach the model as if the agent had been denied: fall through to the recording instead.
+        if (r.isError && this.opts.config.servers[tool.live]?.preset && OUTSIDE_ROOT.test(JSON.stringify(r.content))) {
+          liveError = `the ${tool.live} server refused a path outside its root; replay where the trace was recorded`;
+        } else {
+          return { content: r.content, isError: r.isError, replay: { tier: "live" } };
+        }
       } catch (e) {
         // A server that is down should not make a call unreplayable when the recording can still answer it.
         liveError = `live call failed: ${(e as Error).message}`;

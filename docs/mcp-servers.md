@@ -21,13 +21,18 @@ tracewarp replay --label mcp --agents-only --model claude-haiku-5-5 --judge --re
 ## What a preset does
 
 - **It starts a pinned server, confined to `root`.** That is the filesystem server with `root` as its only allowed
-  folder, or the git server with `--repository <root>`. Set `command` to run your own install instead.
+  folder and `--read-only`, or the git server with `--repository <root>`. Only the top-level package is pinned:
+  `npx`/`uvx` fetch it and its dependencies on first use. Set `command` to run your own install instead (we did,
+  for these runs).
 - **It makes only the read-only tools live.** The table in the [README](../README.md#mcp-server-presets) lists
-  them. Writes (`write_file`, `edit_file`, `git_commit`, `git_reset`, ...) are left out, so an unrecorded write is
-  unreplayable, the same as before. TraceWarp never runs them.
+  them. Writes (`write_file`, `edit_file`, `git_commit`, `git_reset`, ...) are left out, and a config that marks
+  one live is rejected, so an unrecorded write is unreplayable, the same as before. TraceWarp never runs them.
 - **It keeps `fetch` on recorded answers.** A live fetch would see today's web page, and it would let a replayed
   model reach any URL from your CI machine. `openWorld: true` turns it on.
-- **Your own `tools` entries win.** For example, `mcp__fs__read_media_file: { deny: true }`.
+- **Your own `tools` entries are merged on top.** For example, `mcp__fs__read_media_file: { deny: true }`.
+- **A path outside the root never reaches the model as a refusal.** That usually means the trace was recorded in
+  another folder, so the call falls back to the recording, else it is unreplayable. Replay at the same absolute
+  path the agent used.
 
 The tool lists come from each server's own tool list. We checked them by hand instead of trusting the servers'
 `readOnlyHint` annotations, because a hint is only the server's claim. We also checked each pinned version
@@ -62,14 +67,16 @@ hasn't been committed yet?". Each was recorded once, then replayed twice per set
 | --- | --- | --- | --- | --- |
 | No change, recording only (no presets) | 10 | **8** | 0 of 2 | 0% |
 | No change, presets | 10 | **0** | 0 of 10 | -9% |
-| Haiku 5.5, presets | 10 | 0 | 0 of 10 | **-95%** |
+| Haiku 5.5, presets | 15 | 0 | **1 of 15** | **-95%** |
 | Opus 5.5, presets | 10 | 0 | 0 of 10 | **+113%** |
 
 - **Without presets, 8 of 10 unchanged replays stopped.** A replay of the very same model searched for
   `**/*polic*` where the recording searched for `**/*policy*`, or asked `git_log` for 20 commits instead of 30.
   With presets, 10 to 17 calls per setup were answered live, and every replay finished.
-- **On these tasks, Haiku 5.5 kept every answer at 5% of the cost.** It read the same commits and files, often in
-  another order. Opus 5.5 also kept every answer, at about twice the cost.
+- **On these tasks, Haiku 5.5 kept 14 of 15 answers at 5% of the cost.** It read the same commits and files,
+  often in another order. In a third pass (run after the review fixes), one answer said the first commit added
+  "five runbooks" while listing four. The key-facts check and the judge both flagged it as changed. Opus 5.5 kept
+  every answer, at about twice the cost.
 - **Tool paths are noisy, and answers are not.** Even unchanged replays changed tool path or arguments in 7 of
   10 runs: another `max_count`, a reworded glob, `excludePatterns` in another order, short commit hashes instead
   of long ones. That is why TraceWarp rules on the answer (key facts, or the judge) and doesn't count a different
@@ -78,13 +85,14 @@ hasn't been committed yet?". Each was recorded once, then replayed twice per set
   uncommitted change and replayed "Is there anything uncommitted?" again. The replay made the same 3 calls, got
   the 3 recorded answers, and came out the same. Only calls the recording lacks see the repository as it is now.
 
-Unlike the [Agent SDK test](claude-code.md#agent-sdk-agent-with-an-mcp-tool), this one found no regression:
-Haiku held up when the tools were in plain view and the answers sat in files and commits. These runs measure how
+Unlike the [Agent SDK test](claude-code.md#agent-sdk-agent-with-an-mcp-tool), this one found no systematic
+regression, only one slip in 15: Haiku held up when the tools were in plain view and the answers sat in files and
+commits. These runs measure how
 well the presets keep replays going, not which model to ship. Run your own traffic before you switch.
 
 ## Limits
 
-- 5 tasks, 1 repository, 2 replays per setup.
+- 5 tasks, 1 repository, 2 replays per setup (3 for Haiku).
 - The `fetch` preset was not tested live here, because this test machine's network proxy blocks the fetch
   server's outbound requests. Its default is to answer from recordings only.
 - The git preset needs `uv` (`uvx`) and the filesystem preset needs `npx`, unless you set `command`.
