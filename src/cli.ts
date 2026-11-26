@@ -52,14 +52,18 @@ judge:
   model: claude-sonnet-5-5
 
 # Real MCP servers for read-only tools, used only when a call has no recording.
+# The key is the server's name as your agent sees it (tools named mcp__<name>__<tool>).
 servers: {}
-#  fs:
-#    command: [npx, -y, "@modelcontextprotocol/server-filesystem", "."]
+#  fs:  { preset: filesystem, root: . }   # read_text_file, list_directory, search_files, ... go live
+#  git: { preset: git, root: . }          # git_log, git_show, git_diff, ...; never commit, add or reset
+#  web: { preset: fetch }                 # recorded answers only; openWorld: true lets fetch run for real
+#  docs:
+#    command: [node, docs-server.js]      # any other server: mark its read-only tools below
 
 tools: {}
-#  mcp__fs__read_text_file:
+#  mcp__docs__search:
 #    readOnly: true
-#    live: fs
+#    live: docs
 `;
 
 const program = new Command()

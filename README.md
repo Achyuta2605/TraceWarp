@@ -128,15 +128,42 @@ replay:
   onMiss: stop          # or continue: the model gets an error result and carries on
   simulate: false
 servers:
-  fs: { command: [npx, -y, "@modelcontextprotocol/server-filesystem", "."] }
+  fs: { preset: filesystem, root: ./docs }       # known server: its read-only tools go live
+  docs: { command: [node, docs-server.js] }      # any other server: mark its tools below
 tools:
-  mcp__fs__read_text_file: { readOnly: true, live: fs }
+  mcp__docs__search: { readOnly: true, live: docs }
   Bash: { deny: true }  # a permission error, as the recorded session would have got
 builtins:
   claudeCode: { enabled: true }  # Claude Code's Read/Grep/Glob/LS, read-only, in the recorded folder
 ```
 
 Live calls are only allowed for tools marked `readOnly: true`; the config is rejected otherwise.
+
+### MCP server presets
+
+Three common MCP servers have presets, so you don't list their tools by hand:
+
+| Preset | Starts | Live tools | Never run |
+| --- | --- | --- | --- |
+| `filesystem` | `@modelcontextprotocol/server-filesystem@2.4.0`, confined to `root` | read, list, tree, search, file info | write, edit, move, copy, mkdir, append |
+| `git` | `mcp-server-git==2026.11.18 --repository <root>` | status, diff, log, show, branch, remote | commit, add, reset, branch, checkout, merge |
+| `fetch` | `mcp-server-fetch==2026.11.18` | none, unless `openWorld: true` | |
+
+- The server key is the name your agent gave the server, so `fs` answers `mcp__fs__read_text_file`. Set
+  `toolPrefix: ""` for an agent that calls the tools by their bare names.
+- Each preset pins a version we checked against path escapes: `..`, absolute paths and symlinks out of the root
+  are refused, and so are git repositories outside it and git arguments that start with `-` (older git server
+  releases let `--output=` write files). Write tools are left out, so an unrecorded write stays unreplayable.
+- `fetch` reaches the internet, and a replay would see today's page rather than the recorded one, so it answers
+  from the recording unless you set `openWorld: true`.
+- Set `command` to run your own install of the server (no `npx` or `uvx` at replay time). Any tool listed under
+  `tools` keeps your settings, so you can deny or turn off one preset tool.
+- A call the recording already has is answered from the recording. Only new calls see the folder or repository
+  as it is now, so replay against a checkout close to the recorded one.
+
+A replay of Claude Code with the filesystem and git servers: without presets, 8 of 10 unchanged replays stopped
+on a call the recording never made; with them, none did. Details and the model-switch results:
+[docs/mcp-servers.md](docs/mcp-servers.md).
 
 ## What the diff reports
 
@@ -261,7 +288,7 @@ prompts and tool results, so treat them like logs: keep them out of git unless t
 
 ```bash
 npm install
-npm test          # build + 108 tests, no network or API key needed
+npm test          # build + 118 tests, no network or API key needed
 npm run lint && npm run typecheck
 ```
 

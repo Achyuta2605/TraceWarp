@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import { CONFIG_FILE_NAME } from "./brand.js";
+import { PRESET_NAMES, PRESETS, presetTools } from "./presets.js";
 
 /**
  * tracewarp.yaml: how replays answer tool calls that were never recorded.
@@ -19,16 +20,43 @@ import { CONFIG_FILE_NAME } from "./brand.js";
  *   builtins:
  *     claudeCode: { enabled: true, root: . }   # run Claude Code's Read/Grep/Glob/LS for real, inside root
  *   servers:
- *     fs: { command: [npx, -y, "@modelcontextprotocol/server-filesystem", "."] }
+ *     fs: { preset: filesystem, root: ./docs }    # a known server: its read-only tools go live (see presets.ts)
+ *     docs: { command: [node, docs-server.js] }  # any other server: name the tools below
  *   tools:
- *     mcp__fs__read_text_file: { readOnly: true, live: fs }
+ *     mcp__docs__search: { readOnly: true, live: docs }
  */
 
-const serverSchema = z.strictObject({
-  command: z.array(z.string()).min(1),
-  env: z.record(z.string(), z.string()).optional(),
-  cwd: z.string().optional(),
-});
+const serverSchema = z
+  .strictObject({
+    command: z.array(z.string()).min(1).optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    cwd: z.string().optional(),
+    /** A known server (filesystem, git, fetch): TraceWarp starts it pinned and knows which of its tools only read. */
+    preset: z.enum(PRESET_NAMES).optional(),
+    /** The folder a preset server is confined to. Required for filesystem and git. */
+    root: z.string().optional(),
+    /** Let a preset's tools that reach the internet (fetch) run for real. Off by default. */
+    openWorld: z.boolean().default(false),
+    /** How the model names this server's tools. Default `mcp__<server>__`, as Claude Code and the Agent SDK do. */
+    toolPrefix: z.string().optional(),
+  })
+  .superRefine((s, ctx) => {
+    if (!s.preset) {
+      if (!s.command) ctx.addIssue({ code: "custom", path: ["command"], message: "give a command or a preset" });
+      for (const k of ["root", "toolPrefix"] as const) {
+        if (s[k] !== undefined) ctx.addIssue({ code: "custom", path: [k], message: `${k} needs a preset` });
+      }
+      if (s.openWorld) ctx.addIssue({ code: "custom", path: ["openWorld"], message: "openWorld needs a preset" });
+      return;
+    }
+    const p = PRESETS[s.preset];
+    if (p.usesRoot && !s.root) {
+      ctx.addIssue({ code: "custom", path: ["root"], message: `the ${s.preset} preset needs a root folder` });
+    }
+    if (!p.usesRoot && s.root) {
+      ctx.addIssue({ code: "custom", path: ["root"], message: `the ${s.preset} preset takes no root` });
+    }
+  });
 
 const toolSchema = z.strictObject({
   /** Calling the real tool cannot change anything. Required for live calls. */
@@ -76,6 +104,7 @@ const configSchema = z
     servers: z.record(z.string(), serverSchema).default({}),
     tools: z.record(z.string(), toolSchema).default({}),
   })
+  .transform(expandPresets)
   .superRefine((c, ctx) => {
     for (const [name, t] of Object.entries(c.tools)) {
       if (t.live && !t.readOnly) {
@@ -97,6 +126,29 @@ const configSchema = z
       }
     }
   });
+
+type RawConfig = {
+  servers: Record<string, z.infer<typeof serverSchema>>;
+  tools: Record<string, z.infer<typeof toolSchema>>;
+};
+
+/**
+ * Turns each preset server into a command and live entries for its read-only tools. A tool the config already
+ * names keeps the config's settings, so a preset tool can still be denied or switched off. Roots are resolved
+ * against the current folder, as `cwd` is.
+ */
+function expandPresets<C extends RawConfig>(c: C): C {
+  for (const [name, s] of Object.entries(c.servers)) {
+    if (!s.preset) continue;
+    const root = s.root ? resolve(s.root) : "";
+    if (s.root) s.root = root;
+    s.command ??= PRESETS[s.preset].command(root);
+    for (const t of presetTools(name, { ...s, preset: s.preset })) {
+      c.tools[t.name] ??= { readOnly: true, live: name, mcpName: t.mcpName, noSimulate: false, deny: false };
+    }
+  }
+  return c;
+}
 
 export type Config = z.infer<typeof configSchema>;
 export type ToolConfig = z.infer<typeof toolSchema>;
